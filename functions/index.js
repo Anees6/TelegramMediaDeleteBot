@@ -1,52 +1,45 @@
-const functions = require("firebase-functions");
-const admin = require("firebase-admin");
 const TelegramBot = require("node-telegram-bot-api");
 
-admin.initializeApp();
-
-// നിങ്ങളുടെ ബോട്ട് ടോക്കൺ ഇവിടെ സെറ്റ് ചെയ്തിട്ടുണ്ട്
+// നിങ്ങളുടെ ബോട്ട് ടോക്കൺ
 const token = "8673412670:AAFW2QTdkHH_LxecEzJNE-SkflJZe1X8Y0g";
-const bot = new TelegramBot(token);
+const bot = new TelegramBot(token, { polling: true });
 
-// ഫങ്ഷൻ ടൈംഔട്ട് 16 മിനിറ്റാക്കി മാറ്റുന്നു (15 മിനിറ്റ് ടൈമറിന് ശേഷം ഡിലീറ്റ് ചെയ്യാൻ സമയം വേണം)
-exports.telegramWebhook = functions.runWith({ timeoutSeconds: 960 }).https.onRequest(async (req, res) => {
-  try {
-    const update = req.body;
+console.log("Bot is running...");
 
-    if (update.message) {
-      const msg = update.message;
+// ബോട്ട് സ്റ്റാർട്ട് ചെയ്യുമ്പോൾ കാണിക്കേണ്ടത്
+bot.onText(/\/start/, (msg) => {
+  bot.sendMessage(
+    msg.chat.id, 
+    "ഹലോ! ഞാൻ റെഡിയാണ്. ഈ ഗ്രൂപ്പിൽ വരുന്ന മീഡിയ ഫയലുകൾ (ഫോട്ടോ, വീഡിയോ മുതലായവ) 15 മിനിറ്റിന് ശേഷം ഞാൻ സ്വയം ഡിലീറ്റ് ചെയ്തോളാം."
+  );
+});
 
-      const isMedia =
-        msg.photo ||
-        msg.video ||
-        msg.document ||
-        msg.audio ||
-        msg.voice ||
-        msg.sticker ||
-        msg.animation ||
-        msg.video_note;
+// മീഡിയ ഫയലുകൾ ഡിലീറ്റ് ചെയ്യാനുള്ള ഫങ്ഷൻ
+bot.on("message", async (msg) => {
+  // സ്റ്റാർട്ട് കമാൻഡ് ആണെങ്കിൽ ഇത് ഒഴിവാക്കും
+  if (msg.text === "/start") return;
 
-      if (isMedia) {
-        // 15 മിനിറ്റ് കഴിഞ്ഞ ശേഷം മാത്രം റെസ്പോൺസ് അയക്കുകയും ഡിലീറ്റ് ചെയ്യുകയും ചെയ്യുന്നു
-        setTimeout(async () => {
-          try {
-            await bot.deleteMessage(msg.chat.id, msg.message_id);
-            console.log("Message deleted successfully");
-          } catch (e) {
-            console.log("Error deleting message:", e);
-          }
-          // ഡിലീറ്റ് ചെയ്ത ശേഷം മാത്രം ഫങ്ഷൻ അവസാനിപ്പിക്കുന്നു
-          res.status(200).send("OK");
-        }, 15 * 60 * 1000); // 15 മിനിറ്റ്
-        
-        return; // ഇവിടെ വെച്ച് ഫങ്ഷൻ താഴേക്ക് പോകുന്നത് തടയുന്നു
+  const isMedia =
+    msg.photo ||
+    msg.video ||
+    msg.document ||
+    msg.audio ||
+    msg.voice ||
+    msg.sticker ||
+    msg.animation ||
+    msg.video_note;
+
+  if (isMedia) {
+    console.log(`Media detected. Will delete in 15 minutes. Message ID: ${msg.message_id}`);
+    
+    // 15 മിനിറ്റ് (15 * 60 * 1000 മില്ലിസെക്കൻഡ്) കഴിഞ്ഞാൽ ഡിലീറ്റ് ചെയ്യും
+    setTimeout(async () => {
+      try {
+        await bot.deleteMessage(msg.chat.id, msg.message_id);
+        console.log("Message deleted successfully");
+      } catch (e) {
+        console.log("Error deleting message:", e.message);
       }
-    }
-
-    // മീഡിയ അല്ലെങ്കിൽ ഉടനെ തന്നെ OK അയക്കുന്നു
-    res.status(200).send("OK");
-  } catch (err) {
-    console.log(err);
-    res.status(500).send("Error");
+    }, 15 * 60 * 1000);
   }
 });
