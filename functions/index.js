@@ -4,7 +4,8 @@ const TelegramBot = require("node-telegram-bot-api");
 
 admin.initializeApp();
 
-const token = process.env.BOT_TOKEN;
+// നിങ്ങളുടെ ബോട്ട് ടോക്കൺ ഇവിടെ സെറ്റ് ചെയ്തിട്ടുണ്ട്
+const token = "8673412670:AAFW2QTdkHH_LxecEzJNE-SkflJZe1X8Y0g";
 const bot = new TelegramBot(token);
 
 // ഫങ്ഷൻ ടൈംഔട്ട് 16 മിനിറ്റാക്കി മാറ്റുന്നു (15 മിനിറ്റ് ടൈമറിന് ശേഷം ഡിലീറ്റ് ചെയ്യാൻ സമയം വേണം)
