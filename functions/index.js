@@ -4,10 +4,10 @@ const TelegramBot = require("node-telegram-bot-api");
 const token = "8673412670:AAFW2QTdkHH_LxecEzJNE-SkflJZe1X8Y0g";
 const bot = new TelegramBot(token, { polling: true });
 
-// ഡിഫോൾട്ട് ഡിലീറ്റ് സമയം 15 മിനിറ്റ് (മില്ലിസെക്കൻഡിൽ)
-let deleteTimeout = 15 * 60 * 1000; 
+// ഓരോ ഗ്രൂപ്പിന്റെയും ഡിലീറ്റ് സമയം സൂക്ഷിക്കാൻ (Default: 15 മിനിറ്റ്)
+const groupTimeouts = {}; 
 
-// വെൽക്കം മെസ്സേജ് ഓൺ/ഓഫ് ചെയ്യാനുള്ള വേരിയബിൾ (Default: true)
+// വെൽക്കം മെസ്സേജ് ഓൺ/ഓഫ് ചെയ്യാൻ
 let isWelcomeEnabled = true;
 
 // Anti-Flood ഫീച്ചറിന് വേണ്ടിയുള്ള വേരിയബിളുകൾ
@@ -15,10 +15,10 @@ const userMessages = {};
 const FLOOD_LIMIT = 5; 
 const FLOOD_TIME = 5000; 
 
-// തതടയേണ്ട മോശം വാക്കുകളുടെ ലിസ്റ്റ്
+// തടയേണ്ട മോശം വാക്കുകളുടെ ലിസ്റ്റ്
 const badWords = ["spammer", "scam", "fraud", "abuse"];
 
-console.log("Bot is running successfully with commands list...");
+console.log("Bot is running successfully with dynamic timeouts...");
 
 // ബോട്ട് സ്റ്റാർട്ട് ചെയ്യുമ്പോൾ എല്ലാ കമാൻഡുകളും ലിസ്റ്റ് ചെയ്തു കാണിക്കുന്നു
 bot.onText(/\/start/, (msg) => {
@@ -60,8 +60,9 @@ bot.onText(/\/m(\d+)/, async (msg, match) => {
       return bot.sendMessage(chatId, "❌ ക്ഷമിക്കണം, ഒരു ഗ്രൂപ്പ് അഡ്മിന് മാത്രമേ സമയം മാറ്റാൻ സാധിക്കൂ.");
     }
 
-    deleteTimeout = minutes * 60 * 1000;
-    bot.sendMessage(chatId, `⏱️ ഇനി മുതൽ മീഡിയകളും ലിങ്കുകളും **${minutes} മിനിറ്റിന്** ശേഷം ഡിലീറ്റ് ചെയ്യപ്പെടും.`, { parse_mode: "Markdown" });
+    // ആ പ്രത്യേക ഗ്രൂപ്പിലെ സമയം മാറ്റുന്നു
+    groupTimeouts[chatId] = minutes * 60 * 1000;
+    bot.sendMessage(chatId, `⏱️ ഇനി മുതൽ ഈ ഗ്രൂപ്പിലെ മീഡിയകളും ലിങ്കുകളും **${minutes} മിനിറ്റിന്** ശേഷം ഡിലീറ്റ് ചെയ്യപ്പെടും.`, { parse_mode: "Markdown" });
   } catch (e) {
     console.log("Error changing time:", e.message);
   }
@@ -133,12 +134,12 @@ bot.on("new_chat_members", async (msg) => {
 
   const chatId = msg.chat.id;
   const newMember = msg.new_chat_members[0];
-  const name = newMember.first_name || "கூட்டുകാരൻ";
+  const name = newMember.first_name || "കൂട്ടുകാരൻ";
 
   try {
     const welcome = await bot.sendMessage(
       chatId,
-      `👋 ഹലോ [${name}](tg://user?id=${newMember.id}), ഈ ഗ്രൂപ്പിലേക്ക് സ്വാഗതം!\n\n⚠️ ശ്രദ്ധിക്കുക: ഇത് ലിങ്കുകൾ പങ്കുവെക്കാൻ മാത്രമുള്ള ഗ്രൂപ്പാണ്. മറ്റ് മെസ്സേജുകൾ അയച്ചാൽ ബോട്ട് നിങ്ങളെ മ్యూട്ട് ചെയ്യുന്നതായിരിക്കും.`,
+      `👋 ഹലോ [${name}](tg://user?id=${newMember.id}), ഈ ഗ്രൂപ്പിലേക്ക് സ്വാഗതം!\n\n⚠️ ശ്രദ്ധിക്കുക: ഇത് ലിങ്കുകൾ പങ്കുവെക്കാൻ മാത്രമുള്ള ഗ്രൂപ്പാണ്. മറ്റ് മെസ്സേജുകൾ അയച്ചാൽ ബോട്ട് നിങ്ങളെ മ്യൂട്ട് ചെയ്യുന്നതായിരിക്കും.`,
       { parse_mode: "Markdown" }
     );
 
@@ -213,24 +214,31 @@ bot.on("message", async (msg) => {
   // മീഡിയ ഫയലുകൾ ഉണ്ടോ എന്ന് പരിശോധിക്കുന്നു
   const isMedia = msg.photo || msg.video || msg.document || msg.audio || msg.voice || msg.sticker || msg.animation || msg.video_note;
 
-  // ലിങ്കുകൾ ഉണ്ടോ എന്ന് പരിശോധിക്കുന്നു
+  // ലിങ്കുകൾ ഉണ്ടോ എന്ന് പരിശോധിക്കുന്നു (കൂടുതൽ കൃത്യതയോടെ)
   let isLink = false;
   if (msg.entities) {
     isLink = msg.entities.some(entity => entity.type === "url" || entity.type === "text_link");
   }
-  if (msg.text && (msg.text.includes("http://") || msg.text.includes("https://") || msg.text.includes("t.me/"))) {
-    isLink = true;
+  if (msg.text) {
+    const textLower = msg.text.toLowerCase();
+    if (textLower.includes("http://") || textLower.includes("https://") || textLower.includes("t.me/") || textLower.includes("www.")) {
+      isLink = true;
+    }
   }
+
+  // ഈ ഗ്രൂപ്പിലെ ഡിലീറ്റ് സമയം എടുക്കുന്നു (ഇല്ലെങ്കിൽ ഡിഫോൾട്ട് 15 മിനിറ്റ്)
+  const currentTimeout = groupTimeouts[chatId] || (15 * 60 * 1000);
 
   // മീഡിയയോ ലിങ്കോ ആണെങ്കിൽ ടൈമർ വെച്ച് ഡിലീറ്റ് ചെയ്യുന്നു
   if (isMedia || isLink) {
     setTimeout(async () => {
       try {
         await bot.deleteMessage(chatId, msg.message_id);
+        console.log(`Deleted media/link after timeout in chat ${chatId}`);
       } catch (e) {
         console.log("Error deleting media/link:", e.message);
       }
-    }, deleteTimeout);
+    }, currentTimeout);
   } 
   // വെറും ടെക്സ്റ്റ് മെസ്സേജ് ആണെങ്കിൽ ഉടൻ ഡിലീറ്റ് ചെയ്ത് മ്യൂട്ട് ചെയ്യുന്നു
   else if (msg.text) {
