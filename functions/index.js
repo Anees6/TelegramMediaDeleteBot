@@ -5,10 +5,10 @@ const TelegramBot = require("node-telegram-bot-api");
 admin.initializeApp();
 
 const token = process.env.BOT_TOKEN;
-
 const bot = new TelegramBot(token);
 
-exports.telegramWebhook = functions.https.onRequest(async (req, res) => {
+// ഫങ്ഷൻ ടൈംഔട്ട് 16 മിനിറ്റാക്കി മാറ്റുന്നു (15 മിനിറ്റ് ടൈമറിന് ശേഷം ഡിലീറ്റ് ചെയ്യാൻ സമയം വേണം)
+exports.telegramWebhook = functions.runWith({ timeoutSeconds: 960 }).https.onRequest(async (req, res) => {
   try {
     const update = req.body;
 
@@ -26,19 +26,23 @@ exports.telegramWebhook = functions.https.onRequest(async (req, res) => {
         msg.video_note;
 
       if (isMedia) {
+        // 15 മിനിറ്റ് കഴിഞ്ഞ ശേഷം മാത്രം റെസ്പോൺസ് അയക്കുകയും ഡിലീറ്റ് ചെയ്യുകയും ചെയ്യുന്നു
         setTimeout(async () => {
           try {
-            await bot.deleteMessage(
-              msg.chat.id,
-              msg.message_id
-            );
+            await bot.deleteMessage(msg.chat.id, msg.message_id);
+            console.log("Message deleted successfully");
           } catch (e) {
-            console.log(e);
+            console.log("Error deleting message:", e);
           }
-        }, 15 * 60 * 1000);
+          // ഡിലീറ്റ് ചെയ്ത ശേഷം മാത്രം ഫങ്ഷൻ അവസാനിപ്പിക്കുന്നു
+          res.status(200).send("OK");
+        }, 15 * 60 * 1000); // 15 മിനിറ്റ്
+        
+        return; // ഇവിടെ വെച്ച് ഫങ്ഷൻ താഴേക്ക് പോകുന്നത് തടയുന്നു
       }
     }
 
+    // മീഡിയ അല്ലെങ്കിൽ ഉടനെ തന്നെ OK അയക്കുന്നു
     res.status(200).send("OK");
   } catch (err) {
     console.log(err);
