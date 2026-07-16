@@ -3,7 +3,7 @@ import time
 import telebot
 from threading import Thread
 
-# ⚠️ നിങ്ങളുടെ ടെലഗ്രാം ബോട്ട് ടോക്കൺ നേരിട്ട് ഇവിടെ ചേർത്തിട്ടുണ്ട്
+# ⚠️ നിങ്ങളുടെ ടെലഗ്രാം ബോട്ട് ടോക്കൺ
 BOT_TOKEN = "8673412670:AAFW2QTdkHH_LxecEzJNE-SkflJZe1X8Y0g"
 
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -19,14 +19,15 @@ def is_link(text):
         return True
     return False
 
-# 🕒 വാർണിങ് മെസ്സേജ് 5 മിനിറ്റ് കഴിഞ്ഞ് ഡിലീറ്റ് ചെയ്യാനുള്ള ഫങ്ക്ഷൻ
-def delete_warning_after_delay(chat_id, message_id, delay=300):
+# 🕒 മെസ്സേജുകൾ നിശ്ചിത സമയം കഴിഞ്ഞ് ഡിലീറ്റ് ചെയ്യാനുള്ള ഫങ്ക്ഷൻ
+def delete_message_after_delay(chat_id, message_id, delay):
     def delay_delete():
         time.sleep(delay)
         try:
             bot.delete_message(chat_id, message_id)
+            print(f"Message {message_id} deleted after {delay} seconds.")
         except Exception as e:
-            print(f"Failed to delete warning: {e}")
+            print(f"Failed to delete message {message_id}: {e}")
     Thread(target=delay_delete).start()
 
 # 👤 ഫീച്ചർ 1: പുതിയ ആൾക്കാർ ഗ്രൂപ്പിൽ വരുമ്പോൾ വെൽക്കം മെസ്സേജ് അയക്കുന്നു
@@ -37,11 +38,11 @@ def welcome_new_member(message):
             continue
             
         user_mention = f"[{member.first_name}](tg://user?id={member.id})"
-        welcome_text = f"👋 ഹലോ {user_mention}, നമ്മുടെ ഗ്രൂപ്പിലേക്ക് സ്വാഗതം!\n\n📌 *ഗ്രൂപ്പ് നിയമം:* ഇവിടെ ലിങ്കുകൾ മാത്രമേ അനുവദിക്കൂ. സാധാരണ മെസ്സേജുകൾ സിസ്റ്റം സ്വയം ഡിലീറ്റ് ചെയ്യുന്നതാണ്."
+        welcome_text = f"👋 ഹലോ {user_mention}, നമ്മുടെ ഗ്രൂപ്പിലേക്ക് സ്വാഗതം!\n\n📌 *ഗ്രൂപ്പ് നിയമം:* സാധാരണ മെസ്സേജുകൾ ഉടൻ ഡിലീറ്റ് ചെയ്യപ്പെടും. ലിങ്കുകൾ 15 മിനിറ്റിനു ശേഷം സിസ്റ്റം സ്വയം ഡിലീറ്റ് ചെയ്യും."
         
         bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown")
 
-# 👮 ഫീച്ചർ 2: അഡ്മിൻ കമാൻഡുകൾ (/ban, /unban, /mute, /unmute)
+# 👮 ഫീച്ചർ 2: അഡ്മിൻ കമാൻഡുകൾ (/ban, /mute, /unban, /unmute)
 def is_admin(chat_id, user_id):
     try:
         admins = bot.get_chat_administrators(chat_id)
@@ -80,7 +81,7 @@ def admin_commands(message):
     except Exception as e:
         bot.reply_to(message, f"❌ ഒരു എറർ സംഭവിച്ചു: {e}")
 
-# 💬 ഫീച്ചർ 3 & 4: ചീത്ത വാക്കുകൾ തടയലും ലിങ്ക് അല്ലാത്ത മെസ്സേജുകൾ ഡിലീറ്റ് ചെയ്യലും
+# 💬 ഫീച്ചർ 3 & 4: മെസ്സേജ് മോഡറേഷൻ
 @bot.message_handler(func=lambda message: message.chat.type in ['group', 'supergroup'])
 def handle_group_moderation(message):
     text = message.text or message.caption
@@ -99,16 +100,17 @@ def handle_group_moderation(message):
             bot.delete_message(message.chat.id, message.message_id)
             user_mention = f"[{message.from_user.first_name}](tg://user?id={message.from_user.id})"
             warn = bot.send_message(message.chat.id, f"⚠️ {user_mention}, ദയവായി മോശം വാക്കുകൾ ഉപയോഗിക്കരുത്!", parse_mode="Markdown")
-            delete_warning_after_delay(message.chat.id, warn.message_id, delay=60) # 1 മിനിറ്റ് കഴിഞ്ഞ് ഡിലീറ്റ് ചെയ്യും
+            delete_message_after_delay(message.chat.id, warn.message_id, delay=60) # 1 മിനിറ്റ് കഴിഞ്ഞ് ഡിലീറ്റ് ചെയ്യും
             return
         except Exception as e:
             print(f"Error filtering bad word: {e}")
 
-    # 2. ലിങ്ക് ആണോ എന്ന് നോക്കുന്നു
+    # 2. പുതിയ ഫീച്ചർ: ലിങ്ക് ആണെങ്കിൽ 15 മിനിറ്റ് (900 സെക്കൻഡ്) കഴിഞ്ഞ് ഡിലീറ്റ് ചെയ്യുക
     if is_link(text):
+        delete_message_after_delay(message.chat.id, message.message_id, delay=900)
         return
 
-    # 3. ലിങ്ക് അല്ലാത്ത മറ്റ് സാധാരണ മെസ്സേജുകൾ ഡിലീറ്റ് ചെയ്യുന്നു
+    # 3. ലിങ്ക് അല്ലാത്ത മറ്റ് സാധാരണ മെസ്സേജുകൾ ഉടൻ ഡിലീറ്റ് ചെയ്യുന്നു
     try:
         bot.delete_message(message.chat.id, message.message_id)
         
@@ -116,12 +118,12 @@ def handle_group_moderation(message):
         warning_text = f"⚠️ ഹേയ് {user_mention}, ഈ ഗ്രൂപ്പിൽ ലിങ്കുകൾ മാത്രമേ അനുവദിക്കൂ! സാധാരണ മെസ്സേജുകൾ ഡിലീറ്റ് ചെയ്യപ്പെടും."
         
         sent_msg = bot.send_message(message.chat.id, warning_text, parse_mode="Markdown")
-        delete_warning_after_delay(message.chat.id, sent_msg.message_id, delay=300) # 5 മിനിറ്റ് കഴിഞ്ഞ് ഡിലീറ്റ് ചെയ്യും
+        delete_message_after_delay(message.chat.id, sent_msg.message_id, delay=300) # 5 മിനിറ്റ് കഴിഞ്ഞ് വാർണിങ് ഡിലീറ്റ് ചെയ്യും
 
     except Exception as e:
         print(f"Error handling text message: {e}")
 
 # ബോട്ട് സ്റ്റാർട്ട് ചെയ്യുന്നു
 if __name__ == "__main__":
-    print("Bot is running with your token...")
+    print("Bot is running with link timer...")
     bot.infinity_polling()
