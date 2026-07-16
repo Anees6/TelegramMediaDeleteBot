@@ -21,25 +21,160 @@ const badWords = ["spammer", "scam", "fraud", "abuse"];
 // ലിങ്ക് മെസ്സേജുകൾക്ക് നൽകാനുള്ള വിവിധ റിയാക്ഷനുകളുടെ ലിസ്റ്റ്
 const reactions = ["👍", "🔥", "❤️", "👏", "🤩", "🎉", "⚡", "👀"];
 
-console.log("Bot is running: Perfected non-link message filters and 10s warnings...");
+// അനൗൺസ്മെന്റ് മെസ്സേജുകളുടെ ID സൂക്ഷിക്കാൻ (ഇവ 15 മിനിറ്റിൽ ഡിലീറ്റ് ആകില്ല)
+const announcementMessages = new Set();
+
+console.log("Bot is running: Added Mute, Ban, and Announcement (/say) features...");
 
 // ബോട്ട് സ്റ്റാർട്ട് ചെയ്യുമ്പോൾ കാണിക്കുന്ന മെസ്സേജ്
 bot.onText(/\/start/, (msg) => {
   const commandsList = `
 👋 *ഹലോ! ഞാൻ റെഡിയാണ്.*
 
-• ഗ്രൂപ്പിലെ ലിങ്കുകളും മീഡിയകളും 15 മിനിറ്റിൽ ഡിലീറ്റ് ചെയ്യും.
-• ലിങ്കുകൾക്ക് ഓട്ടോമാറ്റിക് റിയാക്ഷൻ നൽകും.
-• ലിങ്ക് അല്ലാത്ത സാധാരണ മെസ്സേജുകൾ ഉടൻ ഡിലീറ്റ് ചെയ്ത് 10 സെക്കൻഡ് വാണിംഗ് നൽകും.
-
-🛠️ *ബോട്ട് കമാൻഡുകൾ:*
-• \`/welcome on\` - വെൽക്കം മെസ്സേജ് ഓൺ ചെയ്യാൻ (Admin Only)
-• \`/welcome off\` - വെൽക്കം മെസ്സേജ് ഓഫ് ചെയ്യാൻ (Admin Only)
+🛠️ *അഡ്മിൻ കമാൻഡുകൾ (ഗ്രൂപ്പിൽ മാത്രം):*
+• \`/say [മെസ്സേജ്]\` - ബോട്ടിന്റെ പേരിൽ അനൗൺസ്മെന്റ് നടത്താൻ.
+• \`/mute\` - ഒരാളുടെ മെസ്സേജിന് Reply ആയി അടിച്ചാൽ അയാളെ മ്യൂട്ട് ചെയ്യാം.
+• \`/unmute\` - ഒരാളുടെ മെസ്സേജിന് Reply ആയി അടിച്ചാൽ മ്യൂട്ട് മാറ്റാം.
+• \`/ban\` - ഒരാളുടെ മെസ്സേജിന് Reply ആയി അടിച്ചാൽ ഗ്രൂപ്പിൽ നിന്ന് ബാൻ ചെയ്യാം.
+• \`/unban\` - ബാൻ ചെയ്തയാളുടെ യൂസർ ഐഡി വെച്ച് ബാൻ മാറ്റാം (\`/unban USER_ID\`).
+• \`/welcome on/off\` - വെൽക്കം മെസ്സേജ് നിയന്ത്രിക്കാൻ.
   `;
   bot.sendMessage(msg.chat.id, commandsList, { parse_mode: "Markdown" });
 });
 
-// വെൽക്കം മെസ്സേജ് ഓൺ/ഓഫ് ചെയ്യാനുള്ള കമാൻഡ് ഫങ്ഷൻ (/welcome on/off)
+// 📢 അനൗൺസ്മെന്റ് കമാൻഡ് (/say മെസ്സേജ്)
+bot.onText(/\/say\s+(.+)/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+  const announcementText = match[1];
+
+  if (msg.chat.type === "private") return;
+
+  try {
+    const chatMember = await bot.getChatMember(chatId, userId);
+    if (chatMember.status !== "administrator" && chatMember.status !== "creator") return;
+
+    // വന്ന കമാൻഡ് മെസ്സേജ് ഡിലീറ്റ് ചെയ്യുന്നു
+    await bot.deleteMessage(chatId, msg.message_id).catch(() => {});
+
+    // ബോട്ടിന്റെ പേരിൽ മെസ്സേജ് അയക്കുന്നു
+    const sentMsg = await bot.sendMessage(chatId, `📢 *അനൗൺസ്മെന്റ്:*\n\n${announcementText}`, { parse_mode: "Markdown" });
+    
+    // ഈ മെസ്സേജ് ഐഡി ലിസ്റ്റിലേക്ക് മാറ്റുന്നു (ഇത് 15 മിനിറ്റിൽ ഡിലീറ്റ് ആകില്ല)
+    announcementMessages.add(sentMsg.message_id);
+
+  } catch (e) {
+    console.log("Announcement Error:", e.message);
+  }
+});
+
+// 🔇 മ്യൂട്ട് കമാൻഡ് (/mute) - മെസ്സേജിന് Reply ആയി ചെയ്യണം
+bot.onText(/\/mute/, async (msg) => {
+  const chatId = msg.chat.id;
+  const adminId = msg.from.id;
+
+  if (msg.chat.type === "private") return;
+
+  try {
+    const chatMember = await bot.getChatMember(chatId, adminId);
+    if (chatMember.status !== "administrator" && chatMember.status !== "creator") return;
+
+    if (!msg.reply_to_message) {
+      return bot.sendMessage(chatId, "❌ മ്യൂട്ട് ചെയ്യേണ്ട ആളുടെ മെസ്സേജിന് Reply ആയി /mute എന്ന് അടിക്കുക.");
+    }
+
+    const targetUserId = msg.reply_to_message.from.id;
+    const targetName = msg.reply_to_message.from.first_name || "യൂസർ";
+
+    await bot.restrictChatMember(chatId, targetUserId, {
+      permissions: { can_send_messages: false }
+    });
+
+    bot.sendMessage(chatId, `🔇 [${targetName}](tg://user?id=${targetUserId}) ഗ്രൂപ്പിൽ മ്യൂട്ട് ചെയ്യപ്പെട്ടിരിക്കുന്നു.`, { parse_mode: "Markdown" });
+  } catch (e) {
+    console.log("Mute Error:", e.message);
+  }
+});
+
+// 🔊 അൺമ്യൂട്ട് കമാൻഡ് (/unmute) - മെസ്സേജിന് Reply ആയി ചെയ്യണം
+bot.onText(/\/unmute/, async (msg) => {
+  const chatId = msg.chat.id;
+  const adminId = msg.from.id;
+
+  if (msg.chat.type === "private") return;
+
+  try {
+    const chatMember = await bot.getChatMember(chatId, adminId);
+    if (chatMember.status !== "administrator" && chatMember.status !== "creator") return;
+
+    if (!msg.reply_to_message) {
+      return bot.sendMessage(chatId, "❌ അൺമ്യൂട്ട് ചെയ്യേണ്ട ആളുടെ മെസ്സേജിന് Reply ആയി /unmute എന്ന് അടിക്കുക.");
+    }
+
+    const targetUserId = msg.reply_to_message.from.id;
+    const targetName = msg.reply_to_message.from.first_name || "യൂസർ";
+
+    await bot.restrictChatMember(chatId, targetUserId, {
+      permissions: {
+        can_send_messages: true,
+        can_send_media_messages: true,
+        can_send_polls: true,
+        can_send_other_messages: true,
+        can_add_web_page_previews: true
+      }
+    });
+
+    bot.sendMessage(chatId, `🔊 [${targetName}](tg://user?id=${targetUserId}) അൺമ്യൂട്ട് ചെയ്യപ്പെട്ടു.`, { parse_mode: "Markdown" });
+  } catch (e) {
+    console.log("Unmute Error:", e.message);
+  }
+});
+
+// 🚫 ബാൻ കമാൻഡ് (/ban) - മെസ്സേജിന് Reply ആയി ചെയ്യണം
+bot.onText(/\/ban/, async (msg) => {
+  const chatId = msg.chat.id;
+  const adminId = msg.from.id;
+
+  if (msg.chat.type === "private") return;
+
+  try {
+    const chatMember = await bot.getChatMember(chatId, adminId);
+    if (chatMember.status !== "administrator" && chatMember.status !== "creator") return;
+
+    if (!msg.reply_to_message) {
+      return bot.sendMessage(chatId, "❌ ബാൻ ചെയ്യേണ്ട ആളുടെ മെസ്സേജിന് Reply ആയി /ban എന്ന് അടിക്കുക.");
+    }
+
+    const targetUserId = msg.reply_to_message.from.id;
+    const targetName = msg.reply_to_message.from.first_name || "യൂസർ";
+
+    await bot.banChatMember(chatId, targetUserId);
+    bot.sendMessage(chatId, `🚫 [${targetName}](tg://user?id=${targetUserId}) ഗ്രൂപ്പിൽ നിന്നും ബാൻ ചെയ്യപ്പെട്ടു.`, { parse_mode: "Markdown" });
+  } catch (e) {
+    console.log("Ban Error:", e.message);
+  }
+});
+
+// 🔓 അൺബാൻ കമാൻഡ് (/unban USER_ID)
+bot.onText(/\/unban\s+(\d+)/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const adminId = msg.from.id;
+  const targetUserId = match[1];
+
+  if (msg.chat.type === "private") return;
+
+  try {
+    const chatMember = await bot.getChatMember(chatId, adminId);
+    if (chatMember.status !== "administrator" && chatMember.status !== "creator") return;
+
+    await bot.unbanChatMember(chatId, targetUserId, { only_if_banned: true });
+    bot.sendMessage(chatId, `✅ യൂസർ ഐഡി \`${targetUserId}\` വിജയകരമായി അൺബാൻ ചെയ്യപ്പെട്ടു.`, { parse_mode: "Markdown" });
+  } catch (e) {
+    console.log("Unban Error:", e.message);
+  }
+});
+
+// വെൽക്കം മെസ്സേജ് കൺട്രോൾ ഫങ്ഷൻ
 bot.onText(/\/welcome\s+(on|off)/i, async (msg, match) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
@@ -49,23 +184,16 @@ bot.onText(/\/welcome\s+(on|off)/i, async (msg, match) => {
 
   try {
     const chatMember = await bot.getChatMember(chatId, userId);
-    if (chatMember.status !== "administrator" && chatMember.status !== "creator") {
-      return bot.sendMessage(chatId, "❌ ഒരു ഗ്രൂപ്പ് അഡ്മിന് മാത്രമേ വെൽക്കം മെസ്സേജ് മാറ്റാൻ സാധിക്കൂ.");
-    }
+    if (chatMember.status !== "administrator" && chatMember.status !== "creator") return;
 
-    if (status === "on") {
-      isWelcomeEnabled = true;
-      bot.sendMessage(chatId, "✅ വെൽക്കം മെസ്സേജ് ഓൺ ആക്കി.", { parse_mode: "Markdown" });
-    } else {
-      isWelcomeEnabled = false;
-      bot.sendMessage(chatId, "📴 വെൽക്കം മെസ്സേജ് ഓഫ് ആക്കി.", { parse_mode: "Markdown" });
-    }
+    isWelcomeEnabled = status === "on";
+    bot.sendMessage(chatId, `✅ വെൽക്കം മെസ്സേജ് *${status.toUpperCase()}* ആക്കി.`, { parse_mode: "Markdown" });
   } catch (e) {
-    console.log("Error toggling welcome settings:", e.message);
+    console.log("Welcome toggle error:", e.message);
   }
 });
 
-// പുതിയ ആളുകൾ വരുമ്പോൾ വെൽക്കം മെസ്സേജ് അയക്കൽ
+// പുതിയ ആളുകൾ വരുമ്പോൾ വെൽക്കം മെസ്സേജ്
 bot.on("new_chat_members", async (msg) => {
   if (!isWelcomeEnabled) return;
   const chatId = msg.chat.id;
@@ -89,7 +217,7 @@ bot.on("message", async (msg) => {
   if (!msg.from || msg.from.is_bot) return;
   
   // ബോട്ട് കമാൻഡുകൾ ആണെങ്കിൽ പ്രോസസ്സ് ചെയ്യില്ല
-  if (msg.text && (msg.text === "/start" || msg.text.toLowerCase().startsWith("/welcome"))) return;
+  if (msg.text && (msg.text === "/start" || msg.text.startsWith("/say") || msg.text === "/mute" || msg.text === "/unmute" || msg.text === "/ban" || msg.text.startsWith("/unban") || msg.text.toLowerCase().startsWith("/welcome"))) return;
   
   const chatId = msg.chat.id;
   const userId = msg.from.id;
@@ -160,7 +288,7 @@ bot.on("message", async (msg) => {
     isLink = true;
   }
 
-  // 1. ലിങ്ക് അടങ്ങിയ മെസ്സേജ് ആണെങ്കിൽ (ടെക്സ്റ്റ് ആയാലും ക്യാപ്ഷൻ ആയാലും)
+  // 1. ലിങ്ക് അടങ്ങിയ മെസ്സേജ് ആണെങ്കിൽ റിയാക്ഷൻ ഇടുകയും 15 മിനിറ്റിൽ ഡിലീറ്റ് ചെയ്യുകയും ചെയ്യുന്നു
   if (isLink) {
     try {
       const randomEmoji = reactions[Math.floor(Math.random() * reactions.length)];
@@ -172,16 +300,19 @@ bot.on("message", async (msg) => {
       console.log("Reaction error:", e.message);
     }
 
-    // 15 മിനിറ്റിന് ശേഷം ഡിലീറ്റ് ചെയ്യും
     setTimeout(() => {
-      bot.deleteMessage(chatId, msg.message_id).catch(()=>{});
+      if (!announcementMessages.has(msg.message_id)) {
+        bot.deleteMessage(chatId, msg.message_id).catch(()=>{});
+      }
     }, DELETE_TIMEOUT);
   } 
   
-  // 2. വെറും മീഡിയ ഫയൽ ആണെങ്കിൽ (ലിങ്ക് ഇല്ലാത്തത്)
+  // 2. വെറും മീഡിയ ഫയൽ ആണെങ്കിൽ (15 മിനിറ്റിൽ ഡിലീറ്റ് ചെയ്യും)
   else if (isMedia) {
     setTimeout(() => {
-      bot.deleteMessage(chatId, msg.message_id).catch(()=>{});
+      if (!announcementMessages.has(msg.message_id)) {
+        bot.deleteMessage(chatId, msg.message_id).catch(()=>{});
+      }
     }, DELETE_TIMEOUT);
   } 
   
@@ -190,27 +321,24 @@ bot.on("message", async (msg) => {
     // അഡ്മിൻമാർ അയക്കുന്ന സാധാരണ ടെക്സ്റ്റ് മെസ്സേജുകൾ 15 മിനിറ്റിൽ ഡിലീറ്റ് ചെയ്യും
     if (isAdmin) {
       setTimeout(() => {
-        bot.deleteMessage(chatId, msg.message_id).catch(()=>{});
+        if (!announcementMessages.has(msg.message_id)) {
+          bot.deleteMessage(chatId, msg.message_id).catch(()=>{});
+        }
       }, DELETE_TIMEOUT);
     } 
-    // മറ്റുള്ള സാധാരണ യൂസർമാർ അയക്കുന്നതാണെങ്കിൽ അപ്പോൾ തന്നെ ഡിലീറ്റ് ചെയ്ത് 10 സെക്കൻഡ് വാണിംഗ് നൽകും
+    // മറ്റുള്ള സാധാരണ യൂസർമാർ അയക്കുന്നതാണെങ്കിൽ ഉടൻ ഡിലീറ്റ് ചെയ്ത് 10 സെക്കൻഡ് വാണിംഗ് നൽകും
     else {
       try {
-        // വന്ന മെസ്സേജ് ഉടൻ തന്നെ ഡിലീറ്റ് ചെയ്യുന്നു
         await bot.deleteMessage(chatId, msg.message_id);
 
-        // മെൻഷൻ ചെയ്ത് വാണിംഗ് അയക്കുന്നു
         const warningMsg = await bot.sendMessage(
           chatId, 
           `⚠️ [${firstName}](tg://user?id=${userId}), ഇത് ലിങ്കുകളും മീഡിയകളും പങ്കുവെക്കാനുള്ള ഗ്രൂപ്പ് മാത്രമാണ്! സാധാരണ മെസ്സേജുകൾ അനുവദിക്കില്ല.`, 
           { parse_mode: "Markdown" }
         );
 
-        // വാണിംഗ് മെസ്സേജ് കൃത്യം 10 സെക്കൻഡിൽ ഡിലീറ്റ് ചെയ്യുന്നു
         setTimeout(() => {
-          bot.deleteMessage(chatId, warningMsg.message_id).catch((err) => {
-            console.log("Warning message delete failed:", err.message);
-          });
+          bot.deleteMessage(chatId, warningMsg.message_id).catch(()=>{});
         }, 10000);
 
       } catch (e) {
