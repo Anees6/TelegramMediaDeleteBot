@@ -1,44 +1,117 @@
-bot.on("message", async (msg) => {
-  if (!msg.text) return;
+const TelegramBot = require("node-telegram-bot-api");
 
-  // Private chat ഒഴിവാക്കുക
-  if (msg.chat.type === "private") return;
+// Bot Token സെറ്റ് ചെയ്യുന്നു
+const token = "8673412670:AAFW2QTdkHH_LxecEzJNE-SkflJZe1X8Y0g";
+const bot = new TelegramBot(token, { polling: true });
 
-  // അഡ്മിൻ ആണോ എന്ന് പരിശോധിക്കുക
-  const admins = await bot.getChatAdministrators(msg.chat.id);
-  const isAdmin = admins.some(admin => admin.user.id === msg.from.id);
+// ഡിഫോൾട്ട് ഡിലീറ്റ് സമയം 15 മിനിറ്റ് (മില്ലിസെക്കൻഡിൽ)
+let deleteTimeout = 15 * 60 * 1000; 
 
-  if (isAdmin) return;
+console.log("Bot is running successfully...");
 
-  // Telegram / Web ലിങ്ക് ആണോ?
-  const linkRegex = /(https?:\/\/|www\.|t\.me\/|telegram\.me\/)/i;
+// ബോട്ട് സ്റ്റാർട്ട് ചെയ്യുമ്പോൾ കാണിക്കേണ്ടത്
+bot.onText(/\/start/, (msg) => {
+  bot.sendMessage(
+    msg.chat.id, 
+    "ഹലോ! ഞാൻ റെഡിയാണ്. ഗ്രൂപ്പുകളിൽ വരുന്ന മീഡിയ ഫയലുകളും ലിങ്കുകളും ഞാൻ നിശ്ചിത സമയത്തിന് ശേഷം ഡിലീറ്റ് ചെയ്തോളാം. വെറും ടെക്സ്റ്റ് മെസ്സേജുകൾ ഉടൻ തന്നെ ഡിലീറ്റ് ചെയ്യും.\n\n⏱️ സമയം മാറ്റാൻ അഡ്മിൻമാർക്ക് /m5, /m10, /m15 കമാൻഡുകൾ ഉപയോഗിക്കാം."
+  );
+});
 
-  // ലിങ്ക് ആണെങ്കിൽ അനുവദിക്കുക
-  if (linkRegex.test(msg.text)) return;
+// സമയം മാറ്റാനുള്ള കമാൻഡ് ഫങ്ഷൻ (/m5, /m10, /m15 മുതലായവ)
+bot.onText(/\/m(\d+)/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+  const minutes = parseInt(match[1]);
+
+  if (msg.chat.type === "private") {
+    return bot.sendMessage(chatId, "ഈ കമാൻഡ് ഗ്രൂപ്പുകളിൽ മാത്രമേ വർക്ക് ആകുകയുള്ളൂ.");
+  }
 
   try {
-    // യൂസറുടെ ടെക്സ്റ്റ് ഡിലീറ്റ് ചെയ്യുക
-    await bot.deleteMessage(msg.chat.id, msg.message_id);
+    const chatMember = await bot.getChatMember(chatId, userId);
+    if (chatMember.status !== "administrator" && chatMember.status !== "creator") {
+      return bot.sendMessage(chatId, "❌ ക്ഷമിക്കണം, ഒരു ഗ്രൂപ്പ് അഡ്മിന് മാത്രമേ സമയം മാറ്റാൻ സാധിക്കൂ.");
+    }
 
-    // മുന്നറിയിപ്പ് അയയ്ക്കുക
-    const warn = await bot.sendMessage(
-      msg.chat.id,
-      `[${
-        msg.from.first_name
-      }](tg://user?id=${msg.from.id}) ലിങ്ക് മാത്രം അനുവദനീയമാണ്.`,
-      {
-        parse_mode: "Markdown"
-      }
-    );
+    deleteTimeout = minutes * 60 * 1000;
+    bot.sendMessage(chatId, `⏱️ ഇനി മുതൽ മീഡിയകളും ലിങ്കുകളും **${minutes} മിനിറ്റിന്** ശേഷം ഡിലീറ്റ് ചെയ്യപ്പെടും.`, { parse_mode: "Markdown" });
+  } catch (e) {
+    console.log("Error changing time:", e.message);
+  }
+});
 
-    // 10 സെക്കൻഡിന് ശേഷം മുന്നറിയിപ്പ് ഡിലീറ്റ് ചെയ്യുക
+// മെസ്സേജുകൾ പരിശോധിക്കാനുള്ള പ്രധാന ഫങ്ഷൻ
+bot.on("message", async (msg) => {
+  if (!msg.from || msg.from.is_bot) return;
+  if (msg.text && (msg.text === "/start" || msg.text.startsWith("/m"))) return;
+  
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+  const firstName = msg.from.first_name || "യൂസ്വർ";
+
+  // അഡ്മിൻമാർ അയക്കുന്ന സാധാരണ മെസ്സേജുകൾ ഡിലീറ്റ് ചെയ്യാതിരിക്കാൻ
+  try {
+    const chatMember = await bot.getChatMember(chatId, userId);
+    if (chatMember.status === "administrator" || chatMember.status === "creator") {
+      return; 
+    }
+  } catch (e) {
+    console.log("Error checking admin status:", e.message);
+  }
+
+  // മീഡിയ ഫയലുകൾ ഉണ്ടോ എന്ന് പരിശോധിക്കുന്നു
+  const isMedia =
+    msg.photo ||
+    msg.video ||
+    msg.document ||
+    msg.audio ||
+    msg.voice ||
+    msg.sticker ||
+    msg.animation ||
+    msg.video_note;
+
+  // ലിങ്കുകൾ ഉണ്ടോ എന്ന് പരിശോധിക്കുന്നു
+  let isLink = false;
+  if (msg.entities) {
+    isLink = msg.entities.some(entity => entity.type === "url" || entity.type === "text_link");
+  }
+  if (msg.text && (msg.text.includes("http://") || msg.text.includes("https://") || msg.text.includes("t.me/"))) {
+    isLink = true;
+  }
+
+  // മീഡിയയോ ലിങ്കോ ആണെങ്കിൽ ടൈമർ വെച്ച് ഡിലീറ്റ് ചെയ്യുന്നു
+  if (isMedia || isLink) {
     setTimeout(async () => {
       try {
-        await bot.deleteMessage(msg.chat.id, warn.message_id);
-      } catch (e) {}
-    }, 10000);
+        await bot.deleteMessage(chatId, msg.message_id);
+        console.log("Media/Link deleted successfully");
+      } catch (e) {
+        console.log("Error deleting media/link:", e.message);
+      }
+    }, deleteTimeout);
+  } 
+  // വെറും ടെക്സ്റ്റ് മെസ്സേജ് (ലിങ്ക് ഇല്ലാത്തത്) ആണെങ്കിൽ ഉടൻ ഡിലീറ്റ് ചെയ്ത് മെൻഷൻ ചെയ്യുന്നു
+  else if (msg.text) {
+    try {
+      await bot.deleteMessage(chatId, msg.message_id);
+      
+      const warningMsg = await bot.sendMessage(
+        chatId, 
+        `⚠️ [${firstName}](tg://user?id=${userId}), ഇത് ലിങ്കുകൾ ഇടാൻ മാത്രമുള്ള ഗ്രൂപ്പ് ആണ്. ദയവായി മറ്റ് മെസ്സേജുകൾ ഒഴിവാക്കുക.`, 
+        { parse_mode: "Markdown" }
+      );
 
-  } catch (err) {
-    console.log(err);
+      // ബോട്ടിന്റെ വാർണിങ് മെസ്സേജ് 10 സെക്കൻഡിന് ശേഷം ഡിലീറ്റ് ചെയ്യുന്നു
+      setTimeout(async () => {
+        try {
+          await bot.deleteMessage(chatId, warningMsg.message_id);
+        } catch (err) {
+          console.log("Error deleting warning:", err.message);
+        }
+      }, 10000);
+
+    } catch (e) {
+      console.log("Error handling text message:", e.message);
+    }
   }
 });
