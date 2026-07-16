@@ -21,10 +21,10 @@ const badWords = ["spammer", "scam", "fraud", "abuse"];
 // ലിങ്ക് മെസ്സേജുകൾക്ക് നൽകാനുള്ള വിവിധ റിയാക്ഷനുകളുടെ ലിസ്റ്റ്
 const reactions = ["👍", "🔥", "❤️", "👏", "🤩", "🎉", "⚡", "👀"];
 
-// അനൗൺസ്മെന്റ് മെസ്സേജുകളുടെ ID സൂക്ഷിക്കാൻ (ഇവ 15 മിനിറ്റിൽ ഡിലീറ്റ് ആകില്ല)
+// അനൗൺസ്മെന്റ് മെസ്സേജുകളുടെ ID സൂക്ഷിക്കാൻ
 const announcementMessages = new Set();
 
-console.log("Bot is running: Added Mute, Ban, and Announcement (/say) features...");
+console.log("Bot is running: Warning message set to 1 minute + auto-mute active...");
 
 // ബോട്ട് സ്റ്റാർട്ട് ചെയ്യുമ്പോൾ കാണിക്കുന്ന മെസ്സേജ്
 bot.onText(/\/start/, (msg) => {
@@ -54,21 +54,15 @@ bot.onText(/\/say\s+(.+)/, async (msg, match) => {
     const chatMember = await bot.getChatMember(chatId, userId);
     if (chatMember.status !== "administrator" && chatMember.status !== "creator") return;
 
-    // വന്ന കമാൻഡ് മെസ്സേജ് ഡിലീറ്റ് ചെയ്യുന്നു
     await bot.deleteMessage(chatId, msg.message_id).catch(() => {});
-
-    // ബോട്ടിന്റെ പേരിൽ മെസ്സേജ് അയക്കുന്നു
     const sentMsg = await bot.sendMessage(chatId, `📢 *അനൗൺസ്മെന്റ്:*\n\n${announcementText}`, { parse_mode: "Markdown" });
-    
-    // ഈ മെസ്സേജ് ഐഡി ലിസ്റ്റിലേക്ക് മാറ്റുന്നു (ഇത് 15 മിനിറ്റിൽ ഡിലീറ്റ് ആകില്ല)
     announcementMessages.add(sentMsg.message_id);
-
   } catch (e) {
     console.log("Announcement Error:", e.message);
   }
 });
 
-// 🔇 മ്യൂട്ട് കമാൻഡ് (/mute) - മെസ്സേജിന് Reply ആയി ചെയ്യണം
+// 🔇 മ്യൂട്ട് കമാൻഡ് (/mute)
 bot.onText(/\/mute/, async (msg) => {
   const chatId = msg.chat.id;
   const adminId = msg.from.id;
@@ -96,7 +90,7 @@ bot.onText(/\/mute/, async (msg) => {
   }
 });
 
-// 🔊 അൺമ്യൂട്ട് കമാൻഡ് (/unmute) - മെസ്സേജിന് Reply ആയി ചെയ്യണം
+// 🔊 അൺമ്യൂട്ട് കമാൻഡ് (/unmute)
 bot.onText(/\/unmute/, async (msg) => {
   const chatId = msg.chat.id;
   const adminId = msg.from.id;
@@ -130,7 +124,7 @@ bot.onText(/\/unmute/, async (msg) => {
   }
 });
 
-// 🚫 ബാൻ കമാൻഡ് (/ban) - മെസ്സേജിന് Reply ആയി ചെയ്യണം
+// 🚫 ബാൻ കമാൻഡ് (/ban)
 bot.onText(/\/ban/, async (msg) => {
   const chatId = msg.chat.id;
   const adminId = msg.from.id;
@@ -326,23 +320,43 @@ bot.on("message", async (msg) => {
         }
       }, DELETE_TIMEOUT);
     } 
-    // മറ്റുള്ള സാധാരണ യൂസർമാർ അയക്കുന്നതാണെങ്കിൽ ഉടൻ ഡിലീറ്റ് ചെയ്ത് 10 സെക്കൻഡ് വാണിംഗ് നൽകും
+    // മറ്റുള്ള സാധാരണ യൂസർമാർ അയക്കുന്നതാണെങ്കിൽ അപ്പോൾ തന്നെ ഡിലീറ്റ് ചെയ്ത് മ്യൂട്ട് ആക്കുകയും 1 മിനിറ്റ് വാണിംഗ് നൽകുകയും ചെയ്യും
     else {
       try {
-        await bot.deleteMessage(chatId, msg.message_id);
+        // വന്ന മെസ്സേജ് ഉടൻ തന്നെ ഡിലീറ്റ് ചെയ്യുന്നു
+        await bot.deleteMessage(chatId, msg.message_id).catch((err) => {
+          console.log("Original message delete failed:", err.message);
+        });
 
+        // ആ യൂസറെ ഗ്രൂപ്പിൽ ഓട്ടോമാറ്റിക്കായി മ്യൂട്ട് ചെയ്യുന്നു
+        await bot.restrictChatMember(chatId, userId, {
+          permissions: {
+            can_send_messages: false,
+            can_send_media_messages: false,
+            can_send_polls: false,
+            can_send_other_messages: false,
+            can_add_web_page_previews: false
+          }
+        }).catch((err) => {
+          console.log("Auto-mute failed:", err.message);
+        });
+
+        // മെൻഷൻ ചെയ്ത് വാണിംഗ് അയക്കുന്നു
         const warningMsg = await bot.sendMessage(
           chatId, 
-          `⚠️ [${firstName}](tg://user?id=${userId}), ഇത് ലിങ്കുകളും മീഡിയകളും പങ്കുവെക്കാനുള്ള ഗ്രൂപ്പ് മാത്രമാണ്! സാധാരണ മെസ്സേജുകൾ അനുവദിക്കില്ല.`, 
+          `🔒 [${firstName}](tg://user?id=${userId}), ഇത് ലിങ്കുകളും മീഡിയകളും പങ്കുവെക്കാനുള്ള ഗ്രൂപ്പ് മാത്രമാണ്! സാധാരണ മെസ്സേജുകൾ അനുവദിക്കില്ല. ചട്ടങ്ങൾ ലംഘിച്ചതിനാൽ നിങ്ങളെ മ്യൂട്ട് ചെയ്തിരിക്കുന്നു.`, 
           { parse_mode: "Markdown" }
         );
 
+        // വാണിംഗ് മെസ്സേജ് കൃത്യം 1 മിനിറ്റിൽ (60000 ms) ഡിലീറ്റ് ചെയ്യുന്നു
         setTimeout(() => {
-          bot.deleteMessage(chatId, warningMsg.message_id).catch(()=>{});
-        }, 10000);
+          bot.deleteMessage(chatId, warningMsg.message_id).catch((err) => {
+            console.log("Warning message delete failed:", err.message);
+          });
+        }, 60000);
 
       } catch (e) {
-        console.log("Error executing text delete/warning:", e.message);
+        console.log("Error executing text delete/warning/mute:", e.message);
       }
     }
   }
