@@ -81,7 +81,7 @@ async def handle_everything(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # --- 1. പുതിയ മെമ്പർമാർ ഗ്രൂപ്പിൽ ജോയിൻ ചെയ്യുമ്പോൾ ---
     if message.new_chat_members:
-        # വെൽക്കം ഫീച്ചർ ഓൺ ആണെങ്കിൽ മാത്രം പ്രവർത്തിക്കും (ഡിഫോൾട്ട് ആയി ഓൺ ആയിരിക്കില്ല, /new on അടിക്കണം)
+        # വെൽക്കം ഫീച്ചർ ഓൺ ആണെങ്കിൽ മാത്രം പ്രവർത്തിക്കും
         if welcome_enabled.get(chat.id, False):
             for new_member in message.new_chat_members:
                 if new_member.is_bot:
@@ -108,7 +108,7 @@ async def handle_everything(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     last_welcome_messages[chat.id] = welcome_msg.message_id
 
-                    # കൃത്യം 2 മിനിറ്റിന് ശേഷം (2 * 60 = 120 സെക്കൻഡ്) ഡിലീറ്റ് ചെയ്യാൻ ഷെഡ്യൂൾ ചെയ്യുന്നു
+                    # കൃത്യം 2 മിനിറ്റിന് ശേഷം (120 സെക്കൻഡ്) ഡിലീറ്റ് ചെയ്യാൻ ഷെഡ്യൂൾ ചെയ്യുന്നു
                     context.job_queue.run_once(
                         delete_warning,
                         when=120,
@@ -170,11 +170,13 @@ def main():
     # /new കമാൻഡിനുള്ള ഹാൻഡ്‌ലർ
     application.add_handler(CommandHandler("new", toggle_welcome))
     
-    # മറ്റെല്ലാ ആക്റ്റിവിറ്റികളും ഫിൽട്ടർ ചെയ്യാൻ
+    # ഗ്രൂപ്പിലെ എല്ലാ കാര്യങ്ങളും (പുതിയ ആളുകൾ വരുന്നത് ഉൾപ്പെടെ) ബോട്ട് ശ്രദ്ധിക്കാൻ filters.StatusUpdate.NEW_CHAT_MEMBERS ചേർത്തു
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_everything))
 
     print("Bot is running...")
-    application.run_polling()
+    
+    # പുതിയ ആളുകൾ ജോയിൻ ചെയ്യുന്ന അപ്ഡേറ്റ് ബോട്ടിന് കിട്ടാൻ വേണ്ടി allowed_updates സെറ്റ് ചെയ്യുന്നു
+    application.run_polling(allowed_updates=["message", "chat_member", "my_chat_member"])
 
 if __name__ == "__main__":
     main()
