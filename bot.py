@@ -1,6 +1,8 @@
 import re
+import random
 import logging
-from telegram import Update, ChatPermissions
+import asyncio
+from telegram import Update, ChatPermissions, ReactionTypeEmoji
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 # ലോഗിൻ വിവരങ്ങൾ അറിയാൻ (Debugging)
@@ -8,11 +10,14 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
 )
 
-# 🔑 നിങ്ങളുടെ ബോട്ട് ടോക്കൺ ഇവിടെ നൽകിയിരിക്കുന്നു
+# 🔑 നിങ്ങളുടെ ബോട്ട് ടോക്കൺ
 BOT_TOKEN = "8397424887:AAEyNXWcGS6e9NoJ_JrUw_TB6ulRlcm-vL4"
 
 # ലിങ്കുകൾ കണ്ടുപിടിക്കാനുള്ള റീജെക്സ് (Regex)
 LINK_REGEX = r'(https?://[^\s]+|www\.[^\s]+)'
+
+# ലിങ്ക് ഇടുമ്പോൾ കൊടുക്കേണ്ട റാൻഡം ഇമോജി ലിസ്റ്റ്
+REACTIONS = ["👍", "🔥", "❤️", "👏", "🤩", "🎉", "👌"]
 
 # യൂസർ അഡ്മിൻ ആണോ എന്ന് പരിശോധിക്കാനുള്ള ഫങ്ക്ഷൻ
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -113,7 +118,6 @@ async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     target_user = update.message.reply_to_message.from_user
     try:
-        # അൺമ്യൂട്ട് ചെയ്യുമ്പോൾ എല്ലാ പെർമിഷനുകളും തിരികെ നൽകുന്നു
         unmute_permissions = ChatPermissions(
             can_send_messages=True, can_send_audios=True, can_send_documents=True,
             can_send_photos=True, can_send_videos=True, can_send_video_notes=True,
@@ -129,8 +133,8 @@ async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ അൺമ്യൂട്ട് ചെയ്യാൻ സാധിച്ചില്ല: {e}")
 
 
-# 💬 ലിങ്ക് ഇല്ലാത്ത വെറും ടെക്സ്റ്റ് മെസ്സേജുകൾ ഫിൽട്ടർ ചെയ്യാനുള്ള ഫങ്ക്ഷൻ
-async def check_text_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# 💬 മെസ്സേജുകൾ പരിശോധിക്കുന്ന പ്രധാന ഫങ്ക്ഷൻ
+async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
     if await is_admin(update, context):
@@ -138,11 +142,16 @@ async def check_text_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     message_text = update.message.text
     
-    # മെസ്സേജിൽ ലിങ്ക് ഉണ്ടെങ്കിൽ ബോട്ട് ഒന്നും ചെയ്യില്ല
+    # 🌟 മെസ്സേജിൽ ലിങ്ക് ഉണ്ടെങ്കിൽ അതിന് റാൻഡം റിയാക്ഷൻ നൽകും
     if re.search(LINK_REGEX, message_text, re.IGNORECASE):
+        try:
+            random_emoji = random.choice(REACTIONS)
+            await update.message.set_reaction(reaction=ReactionTypeEmoji(emoji=random_emoji))
+        except Exception as e:
+            print(f"റിയാക്ഷൻ നൽകാൻ സാധിച്ചില്ല: {e}")
         return
 
-    # ലിങ്ക് ഇല്ലാത്ത മെസ്സേജുകൾ ഉടൻ ഡിലീറ്റ് ചെയ്യും
+    # ⚠️ ലിങ്ക് ഇല്ലാത്ത വെറും ടെക്സ്റ്റ് മെസ്സേജുകൾ ഉടൻ ഡിലീറ്റ് ചെയ്യും
     target_user = update.message.from_user
     user_id = target_user.id
     try:
@@ -171,28 +180,35 @@ async def check_text_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             await update.effective_chat.send_message(f"❌ മ്യൂട്ട് ചെയ്യാൻ സാധിച്ചില്ല: {e}")
     else:
-        await update.effective_chat.send_message(
+        # വാണിംഗ് മെസ്സേജ് അയക്കുന്നു
+        warn_msg = await update.effective_chat.send_message(
             f"⚠️ {target_user.mention_html()}, ഈ ഗ്രൂപ്പിൽ ലിങ്കുകൾ മാത്രമേ അനുവദിക്കൂ. വെറും ടെക്സ്റ്റ് മെസ്സേജുകൾ അയക്കാൻ പാടുള്ളതല്ല. താങ്കളുടെ മെസ്സേജ് ഡിലീറ്റ് ചെയ്തിട്ടുണ്ട്.\n\n"
             f"Status: <b>{current_warnings}/3 Warnings</b>",
             parse_mode="HTML"
         )
+        
+        # 🕒 5 സെക്കൻഡിന് ശേഷം ബോട്ട് അയച്ച വാണിംഗ് മെസ്സേജ് തനിയെ ഡിലീറ്റ് ചെയ്യും
+        await asyncio.sleep(5)
+        try:
+            await warn_msg.delete()
+        except Exception as e:
+            print(f"വാണിംഗ് മെസ്സേജ് ഡിലീറ്റ് ചെയ്യാൻ കഴിഞ്ഞില്ല: {e}")
 
 
 def main():
-    # ബോട്ട് ആപ്ലിക്കേഷൻ സ്റ്റാർട്ട് ചെയ്യുന്നു
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # കമാൻഡ് ഹാൻഡ്‌ലറുകൾ ആഡ് ചെയ്യുന്നു
+    # അഡ്മിൻ കമാൻഡുകൾ
     app.add_handler(CommandHandler("ban", ban_user))
     app.add_handler(CommandHandler("unban", unban_user))
     app.add_handler(CommandHandler("kick", kick_user))
     app.add_handler(CommandHandler("mute", mute_user))
     app.add_handler(CommandHandler("unmute", unmute_user))
 
-    # കമാൻഡുകൾ അല്ലാത്ത വെറും ടെക്സ്റ്റുകൾ പരിശോധിക്കാൻ
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, check_text_only))
+    # ഗ്രൂപ്പിലെ മെസ്സേജുകൾ ഫിൽട്ടർ ചെയ്യാൻ
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
 
-    print("🤖 ബോട്ട് റൺ ആയിക്കൊണ്ടിരിക്കുന്നു...")
+    print("🤖 ബോട്ട് വിജയകരമായി റൺ ആയിക്കൊണ്ടിരിക്കുന്നു...")
     app.run_polling()
 
 if __name__ == "__main__":
