@@ -3,8 +3,7 @@ from telegram import Update, ChatPermissions
 from telegram.ext import (
     Application,
     CommandHandler,
-    ContextTypes,
-    filters
+    ContextTypes
 )
 
 # ----------------- കോൺഫിഗറേഷൻ -----------------
@@ -29,13 +28,13 @@ async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     member = await chat.get_member(user.id)
     return member.status in ["administrator", "creator"]
 
-# 10 സെക്കൻഡ് കഴിഞ്ഞാൽ മെസ്സേജ് ഡിലീറ്റ് ചെയ്യാനുള്ള ഫങ്ക്ഷൻ
+# 10 സെക്കൻഡ് കഴിഞ്ഞാൽ ബോട്ടിന്റെ മെസ്സേജ് ഡിലീറ്റ് ചെയ്യാനുള്ള ഫങ്ക്ഷൻ
 async def delete_message_job(context: ContextTypes.DEFAULT_TYPE):
     job = context.job
     try:
         await context.bot.delete_message(chat_id=job.chat_id, message_id=job.data)
-    except Exception:
-        pass
+    except Exception as e:
+        logging.warning(f"മെസ്സേജ് ഡിലീറ്റ് ചെയ്യാൻ സാധിച്ചില്ല (ഒരുപക്ഷേ പെർമിഷൻ ഇല്ലായിരിക്കാം): {e}")
 
 # ----------------- ബോട്ട് കമാൻഡുകൾ -----------------
 
