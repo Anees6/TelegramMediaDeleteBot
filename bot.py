@@ -1,131 +1,76 @@
-import os
-import time
-import telebot
+import asyncio
+import re
 from threading import Thread
+from flask import Flask
+from telegram import Update, ChatPermissions
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# ⚠️ നിങ്ങളുടെ ടെലഗ്രാം ബോട്ട് ടോക്കൺ
-BOT_TOKEN = "8673412670:AAFW2QTdkHH_LxecEzJNE-SkflJZe1X8Y0g"
+# Flask വെബ് സെർവർ സെറ്റപ്പ്
+app = Flask(__name__)
 
-bot = telebot.TeleBot(BOT_TOKEN)
+@app.route('/')
+def home():
+    return "Bot is alive!"
 
-# 🚫 ഗ്രൂപ്പിൽ നിരോധിക്കേണ്ട ചീത്ത വാക്കുകളുടെ ലിസ്റ്റ്
-BAD_WORDS = ["badword1", "badword2", "ചീത്തവാക്ക്1"]
+def run_flask():
+    # Render നൽകുന്ന പോർട്ടിൽ സെർവർ റൺ ചെയ്യുന്നു
+    app.run(host='0.0.0.0', port=8080)
 
-# 🛠️ ലിങ്ക് ആണോ എന്ന് പരിശോധിക്കാനുള്ള ഫങ്ക്ഷൻ
-def is_link(text):
-    if not text:
-        return False
-    if "http://" in text or "https://" in text or "t.me/" in text or "www." in text or "@" in text:
-        return True
-    return False
+# നിങ്ങളുടെ ബോട്ട് ടോക്കൺ ഇവിടെ നൽകുക
+BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
+LINK_REGEX = re.compile(r'https?://\S+|www\.\S+')
 
-# 🕒 മെസ്സേജുകൾ നിശ്ചിത സമയം കഴിഞ്ഞ് ഡിലീറ്റ് ചെയ്യാനുള്ള ഫങ്ക്ഷൻ
-def delete_message_after_delay(chat_id, message_id, delay):
-    def delay_delete():
-        time.sleep(delay)
-        try:
-            bot.delete_message(chat_id, message_id)
-            print(f"Message {message_id} deleted after {delay} seconds.")
-        except Exception as e:
-            print(f"Failed to delete message {message_id}: {e}")
-    Thread(target=delay_delete).start()
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("ബോട്ട് ആക്ടീവ് ആണ്!")
 
-# 👤 ഫീച്ചർ 1: പുതിയ ആൾക്കാർ ഗ്രൂപ്പിൽ വരുമ്പോൾ വെൽക്കം മെസ്സേജ് അയക്കുന്നു
-@bot.message_handler(content_types=['new_chat_members'])
-def welcome_new_member(message):
-    for member in message.new_chat_members:
-        if member.id == bot.get_me().id:
-            continue
-            
-        user_mention = f"[{member.first_name}](tg://user?id={member.id})"
-        welcome_text = f"👋 ഹലോ {user_mention}, നമ്മുടെ ഗ്രൂപ്പിലേക്ക് സ്വാഗതം!\n\n📌 *ഗ്രൂപ്പ് നിയമം:* সাধারণ മെസ്സേജുകൾ ഉടൻ ഡിലീറ്റ് ചെയ്യപ്പെടും. ലിങ്കുകൾ 15 മിനിറ്റിനു ശേഷം സിസ്റ്റം സ്വയം ഡിലീറ്റ് ചെയ്യും."
-        
-        bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown")
-
-# 👮 ഫീച്ചർ 2: അഡ്മിൻ കമാൻഡുകൾ (/ban, /mute, /unban, /unmute)
-def is_admin(chat_id, user_id):
+async def delete_warning(context: ContextTypes.DEFAULT_TYPE):
+    job = context.job
     try:
-        admins = bot.get_chat_administrators(chat_id)
-        return any(admin.user.id == user_id for admin in admins)
-    except Exception:
-        return False
-
-@bot.message_handler(commands=['ban', 'mute', 'unban', 'unmute'])
-def admin_commands(message):
-    if not is_admin(message.chat.id, message.from_user.id):
-        bot.reply_to(message, "❌ ഈ കമാൻഡ് ഉപയോഗിക്കാൻ നിങ്ങൾ ഒരു അഡ്മിൻ ആയിരിക്കണം!")
-        return
-
-    if not message.reply_to_message:
-        bot.reply_to(message, "❌ നിങ്ങൾ ഏത് യൂസറെയാണ് ബാൻ/മ്യൂട്ട് ചെയ്യേണ്ടത് എന്ന് വച്ചാൽ ആ മെസ്സേജിന് റിപ്ലൈ ആയി ഈ കമാൻഡ് അടിക്കുക.")
-        return
-
-    target_user = message.reply_to_message.from_user
-    command = message.text.split()[0].lower()
-
-    try:
-        if command == '/ban':
-            bot.ban_chat_member(message.chat.id, target_user.id)
-            bot.send_message(message.chat.id, f"🛑 {target_user.first_name} നെ ഗ്രൂപ്പിൽ നിന്നും ബാൻ ചെയ്തു!")
-        elif command == '/unban':
-            bot.unban_chat_member(message.chat.id, target_user.id, only_if_banned=True)
-            bot.send_message(message.chat.id, f"✅ {target_user.first_name} ന്റെ ബാൻ നീക്കം ചെയ്തു!")
-        elif command == '/mute':
-            bot.restrict_chat_member(message.chat.id, target_user.id, can_send_messages=False)
-            bot.send_message(message.chat.id, f"🔇 {target_user.first_name} നെ മ്യൂട്ട് ചെയ്തു!")
-        elif command == '/unmute':
-            bot.restrict_chat_member(message.chat.id, target_user.id, 
-                                     can_send_messages=True, can_send_media_messages=True, 
-                                     can_send_polls=True, can_add_web_page_previews=True)
-            bot.send_message(message.chat.id, f"🔊 {target_user.first_name} ന്റെ മ്യൂട്ട് നീക്കം ചെയ്തു!")
+        await context.bot.delete_message(chat_id=job.chat_id, message_id=job.data)
     except Exception as e:
-        bot.reply_to(message, f"❌ ഒരു എറർ സംഭവിച്ചു: {e}")
+        print(f"Error deleting message: {e}")
 
-# 💬 ഫീച്ചർ 3 & 4: മെസ്സേജ് മോഡറേഷൻ
-@bot.message_handler(func=lambda message: message.chat.type in ['group', 'supergroup'])
-def handle_group_moderation(message):
-    text = message.text or message.caption
-    if not text:
+async def filter_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+    chat = update.effective_chat
+    user = update.effective_user
+
+    if chat.type not in ["group", "supergroup"]:
+        return
+    if user.is_bot or (message.text and LINK_REGEX.search(message.text)):
         return
 
-    # അഡ്മിൻമാർ അയക്കുന്ന മെസ്സേജുകൾ ബോട്ട് ഡിലീറ്റ് ചെയ്യില്ല
-    if is_admin(message.chat.id, message.from_user.id):
-        return
+    try:
+        await message.delete()
+        mute_permissions = ChatPermissions(can_send_messages=False)
+        await chat.restrict_member(user_id=user.id, permissions=mute_permissions)
 
-    # 1. ചീത്ത വാക്കുകൾ ഉണ്ടോ എന്ന് പരിശോധിക്കുന്നു
-    contains_bad_word = any(word.lower() in text.lower() for word in BAD_WORDS)
+        warning_msg = await context.bot.send_message(
+            chat_id=chat.id,
+            text=f"⚠️ {user.mention_html()}, ഈ ഗ്രൂപ്പിൽ ലിങ്കുകൾ മാത്രമേ അനുവദിക്കൂ!",
+            parse_mode="HTML"
+        )
+
+        context.job_queue.run_once(
+            delete_warning, 
+            when=60, 
+            chat_id=chat.id, 
+            data=warning_msg.message_id
+        )
+    except Exception as e:
+        print(f"Error: {e}")
+
+def main():
+    # വെബ് സെർവർ ഒരു പ്രത്യേക ത്രെഡിൽ സ്റ്റാർട്ട് ചെയ്യുന്നു
+    Thread(target=run_flask).start()
+
+    # ബോട്ട് സ്റ്റാർട്ട് ചെയ്യുന്നു
+    application = Application.builder().token(BOT_TOKEN).build()
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, filter_messages))
     
-    if contains_bad_word:
-        try:
-            bot.delete_message(message.chat.id, message.message_id)
-            user_mention = f"[{message.from_user.first_name}](tg://user?id={message.from_user.id})"
-            warn = bot.send_message(message.chat.id, f"⚠️ {user_mention}, ദയവായി മോശം വാക്കുകൾ ഉപയോഗിക്കരുത്!", parse_mode="Markdown")
-            delete_message_after_delay(message.chat.id, warn.message_id, delay=60) # ചീത്ത വാക്കിന്റെ വാർണിങ് 1 മിനിറ്റിൽ പോകും
-            return
-        except Exception as e:
-            print(f"Error filtering bad word: {e}")
+    print("Bot is running...")
+    application.run_polling()
 
-    # 2. ലിങ്ക് ആണെങ്കിൽ 15 മിനിറ്റ് (900 സെക്കൻഡ്) കഴിഞ്ഞ് ഡിലീറ്റ് ചെയ്യുക
-    if is_link(text):
-        delete_message_after_delay(message.chat.id, message.message_id, delay=900)
-        return
-
-    # 3. ലിങ്ക് അല്ലാത്ത മറ്റ് സാധാരണ മെസ്സേജുകൾ ഉടൻ ഡിലീറ്റ് ചെയ്യുന്നു
-    try:
-        bot.delete_message(message.chat.id, message.message_id)
-        
-        user_mention = f"[{message.from_user.first_name}](tg://user?id={message.from_user.id})"
-        warning_text = f"⚠️ ഹേയ് {user_mention}, ഈ ഗ്രൂപ്പിൽ ലിങ്കുകൾ മാത്രമേ അനുവദിക്കൂ! സാധാരണ മെസ്സേജുകൾ ഡിലീറ്റ് ചെയ്യപ്പെടും."
-        
-        sent_msg = bot.send_message(message.chat.id, warning_text, parse_mode="Markdown")
-        
-        # ⏱️ വാർണിങ് മെസ്സേജ് 10 സെക്കൻഡ് കഴിഞ്ഞ് ഡിലീറ്റ് ചെയ്യാൻ മാറ്റിയിരിക്കുന്നു
-        delete_message_after_delay(message.chat.id, sent_msg.message_id, delay=10)
-
-    except Exception as e:
-        print(f"Error handling text message: {e}")
-
-# ബോട്ട് സ്റ്റാർട്ട് ചെയ്യുന്നു
 if __name__ == "__main__":
-    print("Bot is running with 10s warning timer...")
-    bot.infinity_polling()
+    main()
