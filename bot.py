@@ -32,47 +32,12 @@ async def delete_warning(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print(f"Error deleting message: {e}")
 
-async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """പുതിയ ആളുകൾ വരുമ്പോൾ വെൽക്കം ചെയ്യാനുള്ള ഫങ്ഷൻ"""
-    chat_id = update.effective_chat.id
-    
-    for new_member in update.message.new_chat_members:
-        if new_member.is_bot:
-            continue
-
-        # മുമ്പൊരു പുതിയ യൂസർ വന്നപ്പോൾ അയച്ച വെൽക്കം മെസ്സേജ് ഉണ്ടെങ്കിൽ അത് ഡിലീറ്റ് ചെയ്യുന്നു
-        if chat_id in last_welcome_messages:
-            try:
-                await context.bot.delete_message(chat_id=chat_id, message_id=last_welcome_messages[chat_id])
-            except Exception as e:
-                print(f"Error deleting previous welcome message: {e}")
-
-        # പുതിയ മെമ്പറെ മെൻഷൻ ചെയ്തുകൊണ്ട് വെൽക്കം മെസ്സേജ് അയക്കുന്നു
-        welcome_text = (
-            f"👋 ഹലോ {new_member.mention_html()},\n\n"
-            f"ഈ ഗ്രൂപ്പിലേക്ക് സ്വാഗതം! <b>ഗ്രൂപ്പിൽ ലിങ്കുകൾ (Links) മാത്രമേ允許ിക്കൂ.</b>\n"
-            f"ലിങ്ക് അല്ലാത്ത മെസ്സേജുകൾ അയച്ചാൽ ബോട്ട് അത് ഓട്ടോമാറ്റിക് ആയി ഡിലീറ്റ് ചെയ്യുകയും നിങ്ങളെ മ്യൂട്ട് ചെയ്യുകയും ചെയ്യും."
-        )
-        
-        welcome_msg = await context.bot.send_message(
-            chat_id=chat_id,
-            text=welcome_text,
-            parse_mode="HTML"
-        )
-
-        # ഇപ്പോഴത്തെ വെൽക്കം മെസ്സേജിന്റെ ID ഡിക്ഷണറിയിൽ സേവ് ചെയ്യുന്നു
-        last_welcome_messages[chat_id] = welcome_msg.message_id
-
-        # കൃത്യം 5 മിനിറ്റിന് ശേഷം (300 സെക്കൻഡ്) ഈ മെസ്സേജ് ഡിലീറ്റ് ചെയ്യാൻ ഷെഡ്യൂൾ ചെയ്യുന്നു
-        context.job_queue.run_once(
-            delete_warning,
-            when=300,
-            chat_id=chat_id,
-            data=welcome_msg.message_id
-        )
-
-async def filter_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_everything(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """എല്ലാ മെസ്സേജുകളും പുതിയ ആളുകൾ വരുന്നതും കൈകാര്യം ചെയ്യുന്ന മെയിൻ ഫങ്ഷൻ"""
     message = update.message
+    if not message:
+        return
+
     chat = update.effective_chat
     user = update.effective_user
 
@@ -81,12 +46,53 @@ async def filter_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user.is_bot:
         return
 
-    # മെസ്സേജിൽ ലിങ്ക് ഉണ്ടോ എന്ന് പരിശോധിക്കുന്നു
+    # --- 1. പുതിയ മെമ്പർമാർ ഗ്രൂപ്പിൽ ജോയിൻ ചെയ്യുമ്പോൾ ---
+    if message.new_chat_members:
+        for new_member in message.new_chat_members:
+            if new_member.is_bot:
+                continue
+
+            # മുമ്പൊരു പുതിയ യൂസർ വന്നപ്പോൾ അയച്ച വെൽക്കം മെസ്സേജ് ഉണ്ടെങ്കിൽ അത് ഡിലീറ്റ് ചെയ്യുന്നു
+            if chat.id in last_welcome_messages:
+                try:
+                    await context.bot.delete_message(chat_id=chat.id, message_id=last_welcome_messages[chat.id])
+                except Exception as e:
+                    print(f"Error deleting previous welcome message: {e}")
+
+            # വെൽക്കം മെസ്സേജ് ടെക്സ്റ്റ്
+            welcome_text = (
+                f"👋 ഹലോ {new_member.mention_html()},\n\n"
+                f"ഈ ഗ്രൂപ്പിലേക്ക് സ്വാഗതം! <b>ഗ്രൂപ്പിൽ ലിങ്കുകൾ (Links) മാത്രമേ അനുവദിക്കൂ.</b>\n"
+                f"ലിങ്ക് അല്ലാത്ത മെസ്സേജുകൾ അയച്ചാൽ ബോട്ട് അത് ഓട്ടോമാറ്റിക് ആയി ഡിലീറ്റ് ചെയ്യുകയും നിങ്ങളെ മ്യൂട്ട് ചെയ്യുകയും ചെയ്യും."
+            )
+            
+            try:
+                welcome_msg = await context.bot.send_message(
+                    chat_id=chat.id,
+                    text=welcome_text,
+                    parse_mode="HTML"
+                )
+
+                # ഇപ്പോഴത്തെ വെൽക്കം മെസ്സേജിന്റെ ID സേവ് ചെയ്യുന്നു
+                last_welcome_messages[chat.id] = welcome_msg.message_id
+
+                # കൃത്യം 5 മിനിറ്റിന് ശേഷം (300 സെക്കൻഡ്) ഡിലീറ്റ് ചെയ്യാൻ ഷെഡ്യൂൾ ചെയ്യുന്നു
+                context.job_queue.run_once(
+                    delete_warning,
+                    when=300,
+                    chat_id=chat.id,
+                    data=welcome_msg.message_id
+                )
+            except Exception as e:
+                print(f"Error sending welcome message: {e}")
+        return
+
+    # --- 2. ലിങ്ക് ഫിൽട്ടറിംഗ് ലോജിക് (സാധാരണ മെസ്സേജുകൾക്ക്) ---
     has_link = message.text and LINK_REGEX.search(message.text)
 
     try:
         if has_link:
-            # --- ലിങ്ക് ഉള്ള മെസ്സേജ് ആണെങ്കിൽ 15 മിനിറ്റിന് (900 സെക്കൻഡ്) ശേഷം ഡിലീറ്റ് ചെയ്യും ---
+            # ലിങ്ക് ഉള്ള മെസ്സേജ് ആണെങ്കിൽ 15 മിനിറ്റിന് (900 സെക്കൻഡ്) ശേഷം ഡിലീറ്റ് ചെയ്യും
             context.job_queue.run_once(
                 delete_warning, 
                 when=900, 
@@ -95,22 +101,21 @@ async def filter_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # --- ലിങ്ക് അല്ലാത്ത മെസ്സേജ് ആണെങ്കിൽ നിങ്ങളുടെ പഴയ ലോജിക് തന്നെ പ്രവർത്തിക്കും ---
-        # 1. ലിങ്ക് അല്ലാത്ത മെസ്സേജ് ഡിലീറ്റ് ചെയ്യുന്നു
+        # ലിങ്ക് അല്ലാത്ത മെസ്സേജ് ഡിലീറ്റ് ചെയ്യുന്നു
         await message.delete()
 
-        # 2. യൂസറെ മ്യൂട്ട് ചെയ്യുന്നു
+        # യൂസറെ മ്യൂട്ട് ചെയ്യുന്നു
         mute_permissions = ChatPermissions(can_send_messages=False)
         await chat.restrict_member(user_id=user.id, permissions=mute_permissions)
 
-        # 3. വാണിംഗ് മെസ്സേജ് അയക്കുന്നു
+        # വാണിംഗ് മെസ്സേജ് അയക്കുന്നു
         warning_msg = await context.bot.send_message(
             chat_id=chat.id,
             text=f"⚠️ {user.mention_html()}, ഈ ഗ്രൂപ്പിൽ ലിങ്കുകൾ മാത്രമേ അനുവദിക്കൂ! നിങ്ങളുടെ മെസ്സേജ് ഡിലീറ്റ് ചെയ്ത് നിങ്ങളെ മ്യൂട്ട് ചെയ്തിരിക്കുന്നു.",
             parse_mode="HTML"
         )
 
-        # 4. 1 മിനിറ്റിന് (60 സെക്കൻഡ്) ശേഷം വാണിംഗ് മെസ്സേജ് ഡിലീറ്റ് ചെയ്യുന്നു
+        # 1 മിനിറ്റിന് (60 സെക്കൻഡ്) ശേഷം വാണിംഗ് മെസ്സേജ് ഡിലീറ്റ് ചെയ്യുന്നു
         context.job_queue.run_once(
             delete_warning, 
             when=60, 
@@ -118,7 +123,7 @@ async def filter_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             data=warning_msg.message_id
         )
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error in filter_messages: {e}")
 
 def main():
     # വെബ് സെർവർ സ്റ്റാർട്ട് ചെയ്യുന്നു
@@ -128,11 +133,8 @@ def main():
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     
-    # പുതിയ ആളുകൾ ഗ്രൂപ്പിൽ ജോയിൻ ചെയ്യുന്നത് ട്രാക്ക് ചെയ്യാനുള്ള ഹാൻഡ്‌ലർ
-    application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
-    
-    # സാധാരണ മെസ്സേജുകൾ ഫിൽട്ടർ ചെയ്യാനുള്ള ഹാൻഡ്‌ലർ (NEW_CHAT_MEMBERS ഒഴികെയുള്ളവ)
-    application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND & ~filters.StatusUpdate.NEW_CHAT_MEMBERS, filter_messages))
+    # എല്ലാ മെസ്സേജുകളും സ്റ്റാറ്റസ് അപ്ഡേറ്റുകളും ഒരൊറ്റ ഹാൻഡ്‌ലറിലേക്ക് വിടുന്നു
+    application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_everything))
 
     print("Bot is running...")
     application.run_polling()
