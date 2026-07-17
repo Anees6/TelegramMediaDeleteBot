@@ -1,38 +1,157 @@
 import re
+import logging
 from telegram import Update, ChatPermissions
-from telegram.ext import ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# ലിങ്കുകൾ ഉണ്ടോ എന്ന് പരിശോധിക്കാനുള്ള റീജെക്സ് (Regex)
+# ലോഗിൻ വിവരങ്ങൾ അറിയാൻ (Debugging)
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
+)
+
+# 🔑 നിങ്ങളുടെ ബോട്ട് ടോക്കൺ ഇവിടെ നൽകിയിരിക്കുന്നു
+BOT_TOKEN = "8397424887:AAEyNXWcGS6e9NoJ_JrUw_TB6ulRlcm-vL4"
+
+# ലിങ്കുകൾ കണ്ടുപിടിക്കാനുള്ള റീജെക്സ് (Regex)
 LINK_REGEX = r'(https?://[^\s]+|www\.[^\s]+)'
 
-async def check_text_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # മെസ്സേജ് ഇല്ലെങ്കിലോ ടെക്സ്റ്റ് ഇല്ലെങ്കിലോ ഒഴിവാക്കുക
-    if not update.message or not update.message.text:
+# യൂസർ അഡ്മിൻ ആണോ എന്ന് പരിശോധിക്കാനുള്ള ഫങ്ക്ഷൻ
+async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    chat_member = await context.bot.get_chat_member(
+        chat_id=update.effective_chat.id, 
+        user_id=update.effective_user.id
+    )
+    return chat_member.status in ['creator', 'administrator']
+
+
+# 1. Ban (ബാൻ ചെയ്യാൻ - റിപ്ലൈ ആയി /ban)
+async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context):
+        await update.message.reply_text("❌ ഈ കമാൻഡ് ഉപയോഗിക്കാൻ നിങ്ങൾക്ക് അഡ്മിൻ അനുമതിയില്ല.")
+        return
+    if not update.message.reply_to_message:
+        await update.message.reply_text("❌ ബാൻ ചെയ്യേണ്ട വ്യക്തിയുടെ മെസ്സേജിന് റിപ്ലൈ ആയി ഈ കമാൻഡ് അടിക്കുക.")
+        return
+    
+    target_user = update.message.reply_to_message.from_user
+    try:
+        await update.effective_chat.ban_member(user_id=target_user.id)
+        await update.message.reply_text(
+            f"🚫 {target_user.mention_html()} എന്ന യൂസറെ ഗ്രൂപ്പിൽ നിന്നും ബാൻ ചെയ്തിരിക്കുന്നു.",
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ ബാൻ ചെയ്യാൻ സാധിച്ചില്ല: {e}")
+
+
+# 2. Unban (അൺബാൻ ചെയ്യാൻ - /unban USER_ID)
+async def unban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context):
+        await update.message.reply_text("❌ ഈ കമാൻഡ് ഉപയോഗിക്കാൻ നിങ്ങൾക്ക് അഡ്മിൻ അനുമതിയില്ല.")
+        return
+    if not context.args:
+        await update.message.reply_text("❌ അൺബാൻ ചെയ്യേണ്ട യൂസറുടെ ID നൽകുക. ഉദാഹരണം: /unban 12345678")
         return
 
-    # അഡ്മിൻമാർ അയക്കുന്ന മെസ്സേജുകൾ ഡിലീറ്റ് ചെയ്യേണ്ടതില്ലെങ്കിൽ ഇത് നിലനിർത്താം
+    try:
+        user_id = int(context.args[0])
+        await update.effective_chat.unban_member(user_id=user_id)
+        await update.message.reply_text(f"✅ യൂസർ ID: {user_id} അൺബാൻ ചെയ്തിരിക്കുന്നു.")
+    except Exception as e:
+        await update.message.reply_text(f"❌ അൺബാൻ ചെയ്യാൻ സാധിച്ചില്ല: {e}")
+
+
+# 3. Kick (ഗ്രൂപ്പിൽ നിന്നും പുറത്താക്കാൻ - റിപ്ലൈ ആയി /kick)
+async def kick_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context):
+        await update.message.reply_text("❌ ഈ കമാൻഡ് ഉപയോഗിക്കാൻ നിങ്ങൾക്ക് അഡ്മിൻ അനുമതിയില്ല.")
+        return
+    if not update.message.reply_to_message:
+        await update.message.reply_text("❌ പുറത്താക്കേണ്ട വ്യക്തിയുടെ മെസ്സേജിന് റിപ്ലൈ ആയി ഈ കമാൻഡ് അടിക്കുക.")
+        return
+
+    target_user = update.message.reply_to_message.from_user
+    try:
+        await update.effective_chat.ban_member(user_id=target_user.id)
+        await update.effective_chat.unban_member(user_id=target_user.id)
+        await update.message.reply_text(
+            f"👞 {target_user.mention_html()} എന്ന യൂസറെ ഗ്രൂപ്പിൽ നിന്നും കിക്ക് ചെയ്തിരിക്കുന്നു.",
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ കിക്ക് ചെയ്യാൻ സാധിച്ചില്ല: {e}")
+
+
+# 4. Mute (മ്യൂട്ട് ചെയ്യാൻ - റിപ്ലൈ ആയി /mute)
+async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context):
+        await update.message.reply_text("❌ ഈ കമാൻഡ് ഉപയോഗിക്കാൻ നിങ്ങൾക്ക് അഡ്മിൻ അനുമതിയില്ല.")
+        return
+    if not update.message.reply_to_message:
+        await update.message.reply_text("❌ മ്യൂട്ട് ചെയ്യേണ്ട വ്യക്തിയുടെ മെസ്സേജിന് റിപ്ലൈ ആയി ഈ കമാൻഡ് അടിക്കുക.")
+        return
+
+    target_user = update.message.reply_to_message.from_user
+    try:
+        mute_permissions = ChatPermissions(can_send_messages=False)
+        await update.effective_chat.restrict_member(user_id=target_user.id, permissions=mute_permissions)
+        await update.message.reply_text(
+            f"🔇 {target_user.mention_html()} എന്ന യൂസറെ മ്യൂട്ട് ചെയ്തിരിക്കുന്നു (മെസ്സേജ് അയക്കാൻ സാധിക്കില്ല).",
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ മ്യൂട്ട് ചെയ്യാൻ സാധിച്ചില്ല: {e}")
+
+
+# 5. Unmute (അൺമ്യൂട്ട് ചെയ്യാൻ - റിപ്ലൈ ആയി /unmute)
+async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context):
+        await update.message.reply_text("❌ ഈ കമാൻഡ് ഉപയോഗിക്കാൻ നിങ്ങൾക്ക് അഡ്മിൻ അനുമതിയില്ല.")
+        return
+    if not update.message.reply_to_message:
+        await update.message.reply_text("❌ അൺമ്യൂട്ട് ചെയ്യേണ്ട വ്യക്തിയുടെ മെസ്സേജിന് റിപ്ലൈ ആയി ഈ കമാൻഡ് അടിക്കുക.")
+        return
+
+    target_user = update.message.reply_to_message.from_user
+    try:
+        # അൺമ്യൂട്ട് ചെയ്യുമ്പോൾ എല്ലാ പെർമിഷനുകളും തിരികെ നൽകുന്നു
+        unmute_permissions = ChatPermissions(
+            can_send_messages=True, can_send_audios=True, can_send_documents=True,
+            can_send_photos=True, can_send_videos=True, can_send_video_notes=True,
+            can_send_voice_notes=True, can_send_polls=True, can_send_other_messages=True,
+            can_add_web_page_previews=True
+        )
+        await update.effective_chat.restrict_member(user_id=target_user.id, permissions=unmute_permissions)
+        await update.message.reply_text(
+            f"🔊 {target_user.mention_html()} എന്ന യൂസറെ അൺമ്യൂട്ട് ചെയ്തിരിക്കുന്നു.",
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ അൺമ്യൂട്ട് ചെയ്യാൻ സാധിച്ചില്ല: {e}")
+
+
+# 💬 ലിങ്ക് ഇല്ലാത്ത വെറും ടെക്സ്റ്റ് മെസ്സേജുകൾ ഫിൽട്ടർ ചെയ്യാനുള്ള ഫങ്ക്ഷൻ
+async def check_text_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text:
+        return
     if await is_admin(update, context):
         return
 
     message_text = update.message.text
     
-    # മെസ്സേജിൽ ലിങ്ക് ഉണ്ടോ എന്ന് പരിശോധിക്കുന്നു
-    # ലിങ്ക് ഉണ്ടെങ്കിൽ ഒന്നും ചെയ്യേണ്ടതില്ല (റിട്ടേൺ ചെയ്യും)
+    # മെസ്സേജിൽ ലിങ്ക് ഉണ്ടെങ്കിൽ ബോട്ട് ഒന്നും ചെയ്യില്ല
     if re.search(LINK_REGEX, message_text, re.IGNORECASE):
         return
 
-    # ലിങ്ക് ഇല്ലാത്ത വെറും ടെക്സ്റ്റ് മെസ്സേജ് ആണെങ്കിൽ താഴോട്ടുള്ള കോഡ് പ്രവർത്തിക്കും
+    # ലിങ്ക് ഇല്ലാത്ത മെസ്സേജുകൾ ഉടൻ ഡിലീറ്റ് ചെയ്യും
     target_user = update.message.from_user
     user_id = target_user.id
-    
-    # വെറും ടെക്സ്റ്റ് അടങ്ങിയ മെസ്സേജ് ഉടൻ തന്നെ ഡിലീറ്റ് ചെയ്യുന്നു
     try:
         await update.message.delete()
     except Exception as e:
-        print(f"മെസ്സേജ് ഡിലീറ്റ് ചെയ്യാൻ സാധിച്ചില്ല: {e}")
+        print(f"ഡിലീറ്റ് ചെയ്യാൻ സാധിച്ചില്ല: {e}")
         return
 
-    # യൂസറുടെ നിലവിലുള്ള വാണിംഗ് കൗണ്ട് എടുക്കുന്നു (ഇല്ലെങ്കിൽ 0)
+    # വാണിംഗ് കൗണ്ട് സെറ്റ് ചെയ്യുന്നു
     if 'text_warnings' not in context.user_data:
         context.user_data['text_warnings'] = {}
         
@@ -43,21 +162,38 @@ async def check_text_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if current_warnings >= 3:
         try:
             mute_permissions = ChatPermissions(can_send_messages=False)
-            await update.effective_chat.restrict_member(
-                user_id=user_id, permissions=mute_permissions
-            )
+            await update.effective_chat.restrict_member(user_id=user_id, permissions=mute_permissions)
             await update.effective_chat.send_message(
                 f"🔇 {target_user.mention_html()} താങ്കൾ ലിങ്ക് ഇല്ലാതെ 3 തവണ മെസ്സേജ് അയച്ചതിനാൽ ഗ്രൂപ്പിൽ നിന്നും മ്യൂട്ട് ചെയ്തിരിക്കുന്നു. ഇനി ലിങ്കുകൾ മാത്രമേ ഷെയർ ചെയ്യാൻ സാധിക്കൂ.",
                 parse_mode="HTML"
             )
-            # മ്യൂട്ട് ചെയ്ത ശേഷം വാണിംഗ് കൗണ്ട് റീസെറ്റ് ചെയ്യുന്നു
             context.user_data['text_warnings'][user_id] = 0
         except Exception as e:
             await update.effective_chat.send_message(f"❌ മ്യൂട്ട് ചെയ്യാൻ സാധിച്ചില്ല: {e}")
     else:
-        # വാണിംഗ് മെസ്സേജ് അയക്കുന്നു
         await update.effective_chat.send_message(
             f"⚠️ {target_user.mention_html()}, ഈ ഗ്രൂപ്പിൽ ലിങ്കുകൾ മാത്രമേ അനുവദിക്കൂ. വെറും ടെക്സ്റ്റ് മെസ്സേജുകൾ അയക്കാൻ പാടുള്ളതല്ല. താങ്കളുടെ മെസ്സേജ് ഡിലീറ്റ് ചെയ്തിട്ടുണ്ട്.\n\n"
-            f"Status: **{current_warnings}/3 Warnings**",
+            f"Status: <b>{current_warnings}/3 Warnings</b>",
             parse_mode="HTML"
         )
+
+
+def main():
+    # ബോട്ട് ആപ്ലിക്കേഷൻ സ്റ്റാർട്ട് ചെയ്യുന്നു
+    app = Application.builder().token(BOT_TOKEN).build()
+
+    # കമാൻഡ് ഹാൻഡ്‌ലറുകൾ ആഡ് ചെയ്യുന്നു
+    app.add_handler(CommandHandler("ban", ban_user))
+    app.add_handler(CommandHandler("unban", unban_user))
+    app.add_handler(CommandHandler("kick", kick_user))
+    app.add_handler(CommandHandler("mute", mute_user))
+    app.add_handler(CommandHandler("unmute", unmute_user))
+
+    # കമാൻഡുകൾ അല്ലാത്ത വെറും ടെക്സ്റ്റുകൾ പരിശോധിക്കാൻ
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, check_text_only))
+
+    print("🤖 ബോട്ട് റൺ ആയിക്കൊണ്ടിരിക്കുന്നു...")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
