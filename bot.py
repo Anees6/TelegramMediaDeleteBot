@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from threading import Thread
 from flask import Flask
 from telegram import Update, ChatPermissions
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 # --- FLASK WEB SERVER SETUP ---
 flask_app = Flask('')
@@ -28,6 +28,9 @@ logging.basicConfig(
 )
 
 TOKEN = "8673412670:AAFW2QTdkHH_LxecEzJNE-SkflJZe1X8Y0g"
+
+# പഴയ വാണിംഗ് മെസ്സേജ് ഐഡി സൂക്ഷിച്ചുവെക്കാൻ
+last_warning_message_id = None
 
 # ഗ്രൂപ്പ് അഡ്മിൻ പരിശോധന
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -97,7 +100,7 @@ async def kick_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"കിക്ക് ചെയ്യാൻ പറ്റിയില്ല: {e}")
 
-# /mute കമാൻഡ് (എപ്പോഴും മ്യൂട്ട് ചെയ്യാൻ)
+# /mute കമാൻഡ്
 async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return
@@ -105,7 +108,6 @@ async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ ആരെയാണ് മ്യൂട്ട് ചെയ്യേണ്ടത് അവരുടെ മെസ്സേജിന് റിപ്ലൈ ആയി ചെയ്യുക.")
         return
     user_to_mute = update.message.reply_to_message.from_user
-    # മെസ്സേജ് അയക്കാനുള്ള പെർമിഷൻ മാത്രം ഓഫ് ചെയ്യുന്നു
     no_send_permissions = ChatPermissions(can_send_messages=False)
     try:
         await context.bot.restrict_chat_member(update.effective_chat.id, user_to_mute.id, permissions=no_send_permissions)
@@ -113,7 +115,7 @@ async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"മ്യൂട്ട് ചെയ്യാൻ പറ്റിയില്ല: {e}")
 
-# /tmute കമാൻഡ് (Timed Mute - നിശ്ചിത സമയത്തേക്ക് മ്യൂട്ട് ചെയ്യാൻ)
+# /tmute കമാൻഡ്
 async def timed_mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return
@@ -127,8 +129,6 @@ async def timed_mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         minutes = int(context.args[0])
         user_to_mute = update.message.reply_to_message.from_user
-        
-        # മ്യൂട്ട് അവസാനിക്കേണ്ട സമയം കണക്കാക്കുന്നു (UTC ടൈം സോൺ)
         until_time = datetime.now(timezone.utc) + timedelta(minutes=minutes)
         no_send_permissions = ChatPermissions(can_send_messages=False)
         
@@ -144,7 +144,7 @@ async def timed_mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"മ്യൂട്ട് ചെയ്യാൻ പറ്റിയില്ല: {e}")
 
-# /unmute കമാൻഡ് (മ്യൂട്ട് മാറ്റാൻ)
+# /unmute കമാൻഡ്
 async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return
@@ -152,7 +152,6 @@ async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ ആരുടെ മ്യൂട്ടാണ് മാറ്റേണ്ടത് അവരുടെ മെസ്സേജിന് റിപ്ലൈ ആയി ചെയ്യുക.")
         return
     user_to_unmute = update.message.reply_to_message.from_user
-    # സാധാരണ പെർമിഷൻ തിരികെ നൽകുന്നു
     full_permissions = ChatPermissions(
         can_send_messages=True,
         can_send_audios=True,
@@ -171,12 +170,49 @@ async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"അൺമ്യൂട്ട് ചെയ്യാൻ പറ്റിയില്ല: {e}")
 
+# --- ലിങ്ക് ഒഴികെയുള്ള മറ്റ് മെസ്സേജുകൾ ഡിലീറ്റ് ചെയ്യാനുള്ള ഫങ്ഷൻ ---
+async def handle_normal_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global last_warning_message_id
+    
+    # അഡ്മിൻമാർ അയക്കുന്ന മെസ്സേജുകൾ ഡിലീറ്റ് ചെയ്യരുത്
+    if await is_admin(update, context):
+        return
+
+    # മെസ്സേജിൽ ലിങ്കുകൾ (URLs) ഉണ്ടെങ്കിൽ അത് ഡിലീറ്റ് ചെയ്യരുത്, ഇവിടെ വെച്ച് ഫങ്ഷൻ നിർത്തുക
+    if update.message.entities and any(entity.type in ["url", "text_link"] for entity in update.message.entities):
+        return
+
+    chat_id = update.effective_chat.id
+    user = update.effective_user
+
+    try:
+        # 1. ലിങ്ക് അല്ലാത്ത സാധാരണ മെസ്സേജ് ഡിലീറ്റ് ചെയ്യുന്നു
+        await context.bot.delete_message(chat_id=chat_id, message_id=update.message.message_id)
+
+        # 2. പഴയ വാണിംഗ് മെസ്സേജ് ഉണ്ടെങ്കിൽ അത് ഡിലീറ്റ് ചെയ്യുന്നു
+        if last_warning_message_id is not None:
+            try:
+                await context.bot.delete_message(chat_id=chat_id, message_id=last_warning_message_id)
+            except Exception:
+                pass
+
+        # 3. പുതിയ യൂസറെ മെൻഷൻ ചെയ്ത് വാണിംഗ് അയക്കുന്നു
+        warning_text = f"⚠️ {user.mention_html()} ഗ്രൂപ്പിൽ ലിങ്ക് മാത്രം ഇടുക!"
+        sent_message = await context.bot.send_message(chat_id=chat_id, text=warning_text, parse_mode="HTML")
+        
+        # 4. മെസ്സേജ് ഐഡി സേവ് ചെയ്യുന്നു
+        last_warning_message_id = sent_message.message_id
+
+    except Exception as e:
+        print(f"എറർ: {e}")
+
+
 def main():
     keep_alive()
 
     app = Application.builder().token(TOKEN).build()
 
-    # എല്ലാ കമാൻഡുകളും ഇവിടെ രജിസ്റ്റർ ചെയ്യുന്നു
+    # കമാൻഡുകൾ
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("ban", ban_user))
     app.add_handler(CommandHandler("unban", unban_user))
@@ -184,6 +220,9 @@ def main():
     app.add_handler(CommandHandler("mute", mute_user))
     app.add_handler(CommandHandler("tmute", timed_mute_user))
     app.add_handler(CommandHandler("unmute", unmute_user))
+
+    # ഗ്രൂപ്പിൽ വരുന്ന എല്ലാ മെസ്സേജുകളും (ലിങ്ക് അല്ലാത്തവ) ഡിലീറ്റ് ചെയ്യാൻ
+    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_normal_messages))
 
     print("ബോട്ട് പൂർണ്ണ സജ്ജമാണ്...")
     app.run_polling()
