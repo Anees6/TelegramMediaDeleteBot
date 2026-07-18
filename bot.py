@@ -29,8 +29,9 @@ logging.basicConfig(
 
 TOKEN = "8673412670:AAFW2QTdkHH_LxecEzJNE-SkflJZe1X8Y0g"
 
-# പഴയ വാണിംഗ് മെസ്സേജ് ഐഡി സൂക്ഷിച്ചുവെക്കാൻ
+# പഴയ വാണിംഗ് മെസ്സേജും വെൽക്കം മെസ്സേജും സൂക്ഷിക്കാൻ
 last_warning_message_id = None
+last_welcome_message_id = None
 
 # ഗ്രൂപ്പ് അഡ്മിൻ പരിശോധന
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -174,11 +175,9 @@ async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_normal_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global last_warning_message_id
     
-    # അഡ്മിൻമാർ അയക്കുന്ന മെസ്സേജുകൾ ഡിലീറ്റ് ചെയ്യരുത്
     if await is_admin(update, context):
         return
 
-    # മെസ്സേജിൽ ലിങ്കുകൾ (URLs) ഉണ്ടെങ്കിൽ അത് ഡിലീറ്റ് ചെയ്യരുത്, ഇവിടെ വെച്ച് ഫങ്ഷൻ നിർത്തുക
     if update.message.entities and any(entity.type in ["url", "text_link"] for entity in update.message.entities):
         return
 
@@ -186,25 +185,49 @@ async def handle_normal_messages(update: Update, context: ContextTypes.DEFAULT_T
     user = update.effective_user
 
     try:
-        # 1. ലിങ്ക് അല്ലാത്ത സാധാരണ മെസ്സേജ് ഡിലീറ്റ് ചെയ്യുന്നു
         await context.bot.delete_message(chat_id=chat_id, message_id=update.message.message_id)
 
-        # 2. പഴയ വാണിംഗ് മെസ്സേജ് ഉണ്ടെങ്കിൽ അത് ഡിലീറ്റ് ചെയ്യുന്നു
         if last_warning_message_id is not None:
             try:
                 await context.bot.delete_message(chat_id=chat_id, message_id=last_warning_message_id)
             except Exception:
                 pass
 
-        # 3. പുതിയ യൂസറെ മെൻഷൻ ചെയ്ത് വാണിംഗ് അയക്കുന്നു
         warning_text = f"⚠️ {user.mention_html()} ഗ്രൂപ്പിൽ ലിങ്ക് മാത്രം ഇടുക!"
         sent_message = await context.bot.send_message(chat_id=chat_id, text=warning_text, parse_mode="HTML")
-        
-        # 4. മെസ്സേജ് ഐഡി സേവ് ചെയ്യുന്നു
         last_warning_message_id = sent_message.message_id
 
     except Exception as e:
         print(f"എറർ: {e}")
+
+# --- പുതിയ ഫീച്ചർ: ഗ്രൂപ്പിലേക്ക് പുതിയ ആളുകൾ വരുമ്പോൾ സ്വാഗതം ചെയ്യാൻ ---
+async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global last_welcome_message_id
+    chat_id = update.effective_chat.id
+    
+    # പുതിയതായി വന്ന എല്ലാ മെമ്പർമാരെയും സ്വാഗതം ചെയ്യുന്നു
+    for new_member in update.message.new_chat_members:
+        # ബോട്ട് തന്നെയാണ് ഗ്രൂപ്പിൽ കയറിയതെങ്കിൽ വെൽക്കം പറയേണ്ടതില്ല
+        if new_member.id == context.bot.id:
+            continue
+            
+        try:
+            # പഴയ വെൽക്കം മെസ്സേജ് ഉണ്ടെങ്കിൽ അത് ഡിലീറ്റ് ചെയ്യുന്നു
+            if last_welcome_message_id is not None:
+                try:
+                    await context.bot.delete_message(chat_id=chat_id, message_id=last_welcome_message_id)
+                except Exception:
+                    pass
+
+            # പുതിയ യൂസറെ സ്വാഗതം ചെയ്തുകൊണ്ട് മെസ്സേജ് അയക്കുന്നു
+            welcome_text = f"👋 ഹലോ {new_member.mention_html()}, നമ്മുടെ ഗ്രൂപ്പിലേക്ക് സ്വാഗതം!"
+            sent_message = await context.bot.send_message(chat_id=chat_id, text=welcome_text, parse_mode="HTML")
+            
+            # പുതിയ വെൽക്കം മെസ്സേജ് ഐഡി സേവ് ചെയ്യുന്നു
+            last_welcome_message_id = sent_message.message_id
+            
+        except Exception as e:
+            print(f"വെൽക്കം ഫങ്ഷനിൽ എറർ: {e}")
 
 
 def main():
@@ -221,7 +244,10 @@ def main():
     app.add_handler(CommandHandler("tmute", timed_mute_user))
     app.add_handler(CommandHandler("unmute", unmute_user))
 
-    # ഗ്രൂപ്പിൽ വരുന്ന എല്ലാ മെസ്സേജുകളും (ലിങ്ക് അല്ലാത്തവ) ഡിലീറ്റ് ചെയ്യാൻ
+    # ഗ്രൂപ്പിലേക്ക് പുതിയ ആളുകൾ കയറുന്നത് ശ്രദ്ധിക്കാൻ (Status Update Handler)
+    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
+
+    # ഗ്രൂപ്പിൽ വരുന്ന മറ്റ് മെസ്സേജുകൾ നിയന്ത്രിക്കാൻ
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_normal_messages))
 
     print("ബോട്ട് പൂർണ്ണ സജ്ജമാണ്...")
