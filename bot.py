@@ -1,208 +1,156 @@
-import os
-import asyncio
+import time
 import random
-from flask import Flask
-from threading import Thread
-from telegram import Update, ChatPermissions, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
+import telebot
+from telebot.types import ReactionTypeEmoji
 
-# Flask വെബ് സെർവർ സെറ്റപ്പ് (Render ഹോസ്റ്റിംഗ് എപ്പോഴും ലൈവ് ആയിരിക്കാൻ)
-app = Flask('')
+# നിങ്ങളുടെ ടെലിഗ്രാം ബോട്ട് ടോക്കൺ
+BOT_TOKEN = '8397424887:AAEyNXWcGS6e9NoJ_JrUw_TB6ulRlcm-vL4'
+bot = telebot.TeleBot(BOT_TOKEN)
 
-@app.route('/')
-def home():
-    return "Bot is running perfectly!"
+# വെൽക്കം മെസ്സേജ് സെറ്റിംഗ്സ്
+welcome_enabled = True
 
-def run_flask():
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
+# ലഭ്യമായ ചില ഇമോജി റിയാക്ഷനുകൾ
+reactions = ['👍', '❤️', '🔥', '👏', '🎉', '🤩', '👌', '⚡']
 
-# ബോട്ട് വിവരങ്ങൾ
-BOT_TOKEN = "8397424887:AAEyNXWcGS6e9NoJ_JrUw_TB6ulRlcm-vL4"
-GROUP_LINK = "https://t.me/+imWG8JPfw6cyMTQ1"
-
-# 🛑 നിങ്ങളുടെ ശരിയായ Owner ID-യും Group ID-യും ഇവിടെ നൽകുക
-OWNER_ID = 123456789  
-ALLOWED_GROUP_ID = -1002482312345  
-
-user_warnings = {}
-custom_notes = {
-    "rules": "📜 ഗ്രൂപ്പ് നിയമങ്ങൾ അനുസരിക്കുക. പരസ്പരം ബഹുമാനിക്കുക.",
-}
-
-# ബോട്ട് അനുവദിക്കപ്പെട്ട ഗ്രൂപ്പിലാണോ എന്ന് പരിശോധിക്കാൻ
-def is_allowed_chat(update: Update) -> bool:
-    if update.effective_chat.type == "private":
-        return True
-    return update.effective_chat.id == ALLOWED_GROUP_ID
-
-# അഡ്മിൻ/ഓണർ പരിശോധന (എറർ വരാതിരിക്കാൻ ലളിതമാക്കിയത്)
-async def is_owner_or_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    user_id = update.effective_user.id
-    if user_id == OWNER_ID:
-        return True
-    if update.effective_chat.type == "private":
-        return True
-    try:
-        member = await context.bot.get_chat_member(update.effective_chat.id, user_id)
-        return member.status in ["administrator", "creator"]
-    except Exception:
+# അഡ്മിൻ ആണോ എന്ന് പരിശോധിക്കാനുള്ള ഫങ്ഷൻ
+def is_admin(message):
+    if message.chat.type == 'private':
         return False
+    member = bot.get_chat_member(message.chat.id, message.from_user.id)
+    return member.status in ['creator', 'administrator']
 
-# 🌟 റാൻഡം റിയാക്ഷൻ
-async def random_reaction(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_allowed_chat(update) or update.effective_chat.type == "private":
-        return
-    if update.message.text and update.message.text.startswith('/'):
-        return
-
-    reactions = ["👍", "❤️", "🔥", "😂", "😮", "🎉", "👏", "⚡"]
-    chosen_reaction = random.choice(reactions)
+# 1. വെൽക്കം മെസ്സേജ് ഓൺ/ഓഫ് (/welcome on അല്ലെങ്കിൽ /welcome off)
+@bot.message_handler(commands=['welcome'])
+def toggle_welcome(message):
+    global welcome_enabled
+    
+    # കമാൻഡ് മെസ്സേജ് ഉടൻ തന്നെ ഡിലീറ്റ് ചെയ്യുന്നു
     try:
-        await context.bot.set_message_reaction(
-            chat_id=update.effective_chat.id,
-            message_id=update.message.message_id,
-            reaction=[{"type": "emoji", "emoji": chosen_reaction}]
-        )
+        bot.delete_message(message.chat.id, message.message_id)
     except Exception:
         pass
 
-# കമാൻഡുകൾ
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_allowed_chat(update): return
-    keyboard = [
-        [InlineKeyboardButton("Help & Commands 📜", callback_data="help_menu")],
-        [InlineKeyboardButton("Join Our Group 🔗", url=GROUP_LINK)]
-    ]
-    await update.message.reply_text(
-        "ഹലോ! ഞാൻ നിങ്ങളുടെ ഗ്രൂപ്പ് മാനേജ്മെന്റ് ബോട്ട് ആണ്.\n\nകമാൻഡുകൾ മനസ്സിലാക്കാൻ താഴെയുള്ള ബട്ടൺ ക്ലിക്ക് ചെയ്യുക.",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    if not is_admin(message):
+        bot.reply_to(message, 'നിങ്ങൾക്ക് ഈ കമാൻഡ് ഉപയോഗിക്കാൻ അനുവാദമില്ല.')
+        return
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_allowed_chat(update): return
-    help_text = (
-        "🛠 **ഗ്രൂപ്പ് മാനേജ്മെന്റ് കമാൻഡുകൾ:**\n\n"
-        "🛑 **Ban:** `/ban` (മെസ്സേജിന് റിപ്ലൈ ചെയ്യുക)\n"
-        "👋 **Kick:** `/kick`\n"
-        "🤫 **Mute:** `/mute` | `/unmute`\n"
-        "⚠️ **Warning:** `/warn` (3 വാണിംഗ് ആയാൽ ഓട്ടോ ബാൻ)\n"
-        "📝 **Notes:** `/save <name> <content>` | `/get <name>`"
-    )
-    await update.message.reply_text(help_text)
-
-async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    if query.data == "help_menu":
-        await query.edit_message_text(text="• `/ban` - Ban ചെയ്യാൻ\n• `/kick` - പുറത്താക്കാൻ\n• `/mute` - മ്യൂട്ട് ചെയ്യാൻ\n• `/warn` - വാണിംഗ് നൽകാൻ")
-
-# 🛑 മെസ്സേജുകൾ ശരിയായി വർക്ക് ആകാൻ Text റെസ്‌പോൺസ് ലളിതമാക്കി
-async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_allowed_chat(update) or update.effective_chat.type == "private": return
-    if not await is_owner_or_admin(update, context): return
-    if not update.message.reply_to_message:
-        return await update.message.reply_text("❌ ആർക്കാണോ ബാൻ നൽകേണ്ടത് ആ മെസ്സേജിന് റിപ്ലൈ ആയി /ban എന്ന് ടൈപ്പ് ചെയ്യുക.")
-
-    target_user = update.message.reply_to_message.from_user
-    await context.bot.ban_chat_member(update.effective_chat.id, target_user.id)
-    await update.message.reply_text(f"🛑 {target_user.first_name} ഗ്രൂപ്പിൽ നിന്നും Ban ചെയ്യപ്പെട്ടു.")
-
-async def kick_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_allowed_chat(update) or update.effective_chat.type == "private": return
-    if not await is_owner_or_admin(update, context): return
-    if not update.message.reply_to_message: return
-
-    target_user = update.message.reply_to_message.from_user
-    await context.bot.ban_chat_member(update.effective_chat.id, target_user.id)
-    await context.bot.unban_chat_member(update.effective_chat.id, target_user.id)
-    await update.message.reply_text(f"👋 {target_user.first_name} ഗ്രൂപ്പിൽ നിന്നും പുറത്താക്കപ്പെട്ടു.")
-
-async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_allowed_chat(update) or update.effective_chat.type == "private": return
-    if not await is_owner_or_admin(update, context): return
-    if not update.message.reply_to_message: return
-
-    target_user = update.message.reply_to_message.from_user
-    await context.bot.restrict_chat_member(update.effective_chat.id, target_user.id, ChatPermissions(can_send_messages=False))
-    await update.message.reply_text(f"🤫 {target_user.first_name} Mute ചെയ്യപ്പെട്ടു.")
-
-async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_allowed_chat(update) or update.effective_chat.type == "private": return
-    if not await is_owner_or_admin(update, context): return
-    if not update.message.reply_to_message: return
-
-    target_user = update.message.reply_to_message.from_user
-    await context.bot.restrict_chat_member(update.effective_chat.id, target_user.id, ChatPermissions(can_send_messages=True, can_send_media_messages=True, can_send_other_messages=True))
-    await update.message.reply_text(f"🔊 {target_user.first_name} അൺമ്യൂട്ട് ചെയ്യപ്പെട്ടു.")
-
-async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_allowed_chat(update) or update.effective_chat.type == "private": return
-    if not await is_owner_or_admin(update, context): return
-    if not update.message.reply_to_message: return
-
-    target_user = update.message.reply_to_message.from_user
-    user_id = target_user.id
-    chat_id = update.effective_chat.id
-    
-    if chat_id not in user_warnings: user_warnings[chat_id] = {}
-    if user_id not in user_warnings[chat_id]: user_warnings[chat_id][user_id] = 0
-    
-    user_warnings[chat_id][user_id] += 1
-    count = user_warnings[chat_id][user_id]
-    
-    if count >= 3:
-        await context.bot.ban_chat_member(chat_id, user_id)
-        user_warnings[chat_id][user_id] = 0
-        await update.message.reply_text(f"🛑 {target_user.first_name} 3 വാണിംഗുകൾ ലഭിച്ചതിനാൽ Ban ചെയ്യപ്പെട്ടു.")
+    # കമാൻഡിനൊപ്പമുള്ള ടെക്സ്റ്റ് (on/off) എടുക്കുന്നു
+    args = message.text.split()
+    if len(args) > 1:
+        status = args[1].lower()
+        if status == 'on':
+            welcome_enabled = True
+            bot.send_message(message.chat.id, 'പുതിയ മെമ്പേഴ്സിനായുള്ള സ്വാഗതം ഓൺ ചെയ്തു.')
+        elif status == 'off':
+            welcome_enabled = False
+            bot.send_message(message.chat.id, 'Welcome മെസ്സേജ് ഓഫ് ചെയ്തു.')
+        else:
+            bot.send_message(message.chat.id, 'ഉപയോഗിക്കേണ്ട രീതി: /welcome on അല്ലെങ്കിൽ /welcome off')
     else:
-        await update.message.reply_text(f"⚠️ {target_user.first_name} നിങ്ങൾക്ക് ഒരു വാണിംഗ് ലഭിച്ചു! ({count}/3)")
+        bot.send_message(message.chat.id, 'ഉപയോഗിക്കേണ്ട രീതി: /welcome on അല്ലെങ്കിൽ /welcome off')
 
-async def save_note(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_allowed_chat(update): return
-    if not await is_owner_or_admin(update, context): return
-    if len(context.args) < 2: return
+# പുതിയ ആളുകൾ ഗ്രൂപ്പിൽ വരുമ്പോൾ
+@bot.message_handler(content_types=['new_chat_members'])
+def greet_new_members(message):
+    if not welcome_enabled:
+        return
+    for user in message.new_chat_members:
+        bot.send_message(message.chat.id, f"ഹലോ {user.first_name}, ഗ്രൂപ്പിലേക്ക് സ്വാഗതം!")
+
+# 2. താൽക്കാലിക മ്യൂട്ട് (/tmute 10) - മെസ്സേജിന് റിപ്ലൈ ആയി നൽകുക
+@bot.message_handler(commands=['tmute'])
+def temporary_mute(message):
+    # കമാൻഡ് മെസ്സേജ് ഉടൻ തന്നെ ഡിലീറ്റ് ചെയ്യുന്നു
+    try:
+        bot.delete_message(message.chat.id, message.message_id)
+    except Exception:
+        pass
+
+    if not is_admin(message):
+        bot.reply_to(message, 'നിങ്ങൾ ഒരു അഡ്മിൻ അല്ല.')
+        return
     
-    note_name = context.args[0].lower()
-    note_content = " ".join(context.args[1:])
-    custom_notes[note_name] = note_content
-    await update.message.reply_text(f"✅ നോട്ട് '{note_name}' വിജയകരമായി സേവ് ചെയ്തു.")
+    if not message.reply_to_message:
+        bot.send_message(message.chat.id, 'ഏത് യൂസറെയാണ് മ്യൂട്ട് ചെയ്യേണ്ടത്, അവരുടെ മെസ്സേജിന് റിപ്ലൈ ആയി ഈ കമാൻഡ് അടിക്കുക.')
+        return
 
-async def get_note(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_allowed_chat(update): return
-    if len(context.args) < 1: return
+    args = message.text.split()
+    if len(args) < 2 or not args[1].isdigit():
+        bot.send_message(message.chat.id, 'മിനിറ്റുകൾ കൃത്യമായി നൽകുക. ഉദാഹരണത്തിന്: /tmute 10')
+        return
+
+    duration = int(args[1])
+    user_id = message.reply_to_message.from_user.id
+    until_date = int(time.time()) + (duration * 60)
+
+    try:
+        # മെസ്സേജ് അയക്കാനുള്ള പെർമിഷൻ ബ്ലോക്ക് ചെയ്യുന്നു
+        bot.restrict_chat_member(
+            chat_id=message.chat.id,
+            user_id=user_id,
+            until_date=until_date,
+            can_send_messages=False
+        )
+        bot.send_message(message.chat.id, f"{message.reply_to_message.from_user.first_name} എന്ന യൂസറെ {duration} മിനിറ്റിലേക്ക് മ്യൂട്ട് ചെയ്തു.")
+    except Exception:
+        bot.send_message(message.chat.id, 'മ്യൂട്ട് ചെയ്യാൻ സാധിച്ചില്ല. ബോട്ടിന് അഡ്മിൻ പെർമിഷൻ ഉണ്ടെന്ന് ഉറപ്പാക്കുക.')
+
+# 3. താൽക്കാലിക ബാൻ (/tban 10) - മെസ്സേജിന് റിപ്ലൈ ആയി നൽകുക
+@bot.message_handler(commands=['tban'])
+def temporary_ban(message):
+    # കമാൻഡ് മെസ്സേജ് ഉടൻ തന്നെ ഡിലീറ്റ് ചെയ്യുന്നു
+    try:
+        bot.delete_message(message.chat.id, message.message_id)
+    except Exception:
+        pass
+
+    if not is_admin(message):
+        bot.reply_to(message, 'നിങ്ങൾ ഒരു അഡ്മിൻ അല്ല.')
+        return
     
-    note_name = context.args[0].lower()
-    if note_name in custom_notes:
-        await update.message.reply_text(custom_notes[note_name])
+    if not message.reply_to_message:
+        bot.send_message(message.chat.id, 'ഏത് യൂസറെയാണ് ബാൻ ചെയ്യേണ്ടത്, അവരുടെ മെസ്സേജിന് റിപ്ലൈ ആയി ഈ കമാൻഡ് അടിക്കുക.')
+        return
 
-async def welcome_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_allowed_chat(update): return
-    for member in update.message.new_chat_members:
-        if not member.is_bot:
-            await update.message.reply_text(f"ഹലോ {member.first_name} 👋!\nഞങ്ങളുടെ ഗ്രൂപ്പിലേക്ക് സ്വാഗതം! ✨")
+    args = message.text.split()
+    if len(args) < 2 or not args[1].isdigit():
+        bot.send_message(message.chat.id, 'മിനിറ്റുകൾ കൃത്യമായി നൽകുക. ഉദാഹരണത്തിന്: /tban 10')
+        return
 
-def main():
-    # Flask വെബ് സെർവർ ഒരു സെപ്പറേറ്റ് ത്രെഡിൽ സ്റ്റാർട്ട് ചെയ്യുന്നു
-    Thread(target=run_flask).start()
+    duration = int(args[1])
+    user_id = message.reply_to_message.from_user.id
+    until_date = int(time.time()) + (duration * 60)
 
-    application = Application.builder().token(BOT_TOKEN).build()
+    try:
+        bot.ban_chat_member(chat_id=message.chat.id, user_id=user_id, until_date=until_date)
+        bot.send_message(message.chat.id, f"{message.reply_to_message.from_user.first_name} എന്ന യൂസറെ {duration} മിനിറ്റിലേക്ക് ബാൻ ചെയ്തു.")
+    except Exception:
+        bot.send_message(message.chat.id, 'ബാൻ ചെയ്യാൻ സാധിച്ചില്ല. ബോട്ടിന് അഡ്മിൻ പെർമിഷൻ ഉണ്ടെന്ന് ഉറപ്പാക്കുക.')
 
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("ban", ban_user))
-    application.add_handler(CommandHandler("kick", kick_user))
-    application.add_handler(CommandHandler("mute", mute_user))
-    application.add_handler(CommandHandler("unmute", unmute_user))
-    application.add_handler(CommandHandler("warn", warn_user))
-    application.add_handler(CommandHandler("save", save_note))
-    application.add_handler(CommandHandler("get", get_note))
-    
-    application.add_handler(CallbackQueryHandler(button_click))
-    application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_member))
-    application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), random_reaction))
+# ലിങ്കുകൾക്ക് റിയാക്ഷൻ നൽകാനുള്ള ഫങ്ഷൻ
+@bot.message_handler(func=lambda message: True)
+def handle_all_messages(message):
+    # മെസ്സേജിൽ ലിങ്കുകൾ (URL) ഉണ്ടോ എന്ന് പരിശോധിക്കുന്നു
+    has_link = False
+    if message.entities:
+        for entity in message.entities:
+            if entity.type in ['url', 'text_link']:
+                has_link = True
+                break
 
-    print("Bot is running with Flask...")
-    application.run_polling()
+    if has_link:
+        # ലിങ്ക് കണ്ടാൽ ഒരു റാണ്ടം ഇമോജി സെലക്ട് ചെയ്ത് റിയാക്ഷൻ നൽകും
+        random_emoji = random.choice(reactions)
+        try:
+            bot.set_message_reaction(
+                chat_id=message.chat.id,
+                message_id=message.message_id,
+                reaction=[ReactionTypeEmoji(type="emoji", emoji=random_emoji)]
+            )
+        except Exception:
+            pass
 
-if __name__ == "__main__":
-    main()
+# ബോട്ട് റൺ ചെയ്യുക
+print("ബോട്ട് ഓൺലൈൻ ആയി...")
+bot.infinity_polling()
