@@ -6,7 +6,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 # നിങ്ങളുടെ ടെലിഗ്രാം ബോട്ട് കീ (Token)
 BOT_TOKEN = "8397424887:AAEyNXWcGS6e9NoJ_JrUw_TB6ulRlcm-vL4"
 
-# /start കമാൻഡ് മെസ്സേജ് ഫങ്ഷൻ
+# /start കമാൻഡ് മെസ്സേജ് ഫങ്ഷൻ (ഗ്രൂപ്പിലും പേഴ്‌സണൽ ചാറ്റിലും വർക്ക് ആകും)
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     group_link = "https://t.me/+imWG8JPfw6cyMTQ1"
     await update.message.reply_text(
@@ -26,11 +26,19 @@ async def welcome_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
+    
+    # പേഴ്‌സണൽ ചാറ്റിൽ അഡ്മിൻ ചെക്കിങ് ആവശ്യമില്ല
+    if update.effective_chat.type == "private":
+        return True
+        
     member = await context.bot.get_chat_member(chat_id, user_id)
     return member.status in ["administrator", "creator"]
 
 # 2. Ban ചെയ്യാൻ (/ban)
 async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.type == "private":
+        return await update.message.reply_text("❌ ഈ കമാൻഡ് ഗ്രൂപ്പിൽ മാത്രമേ ഉപയോഗിക്കാൻ കഴിയൂ.")
+        
     if not await is_admin(update, context):
         await update.message.reply_text("❌ ഈ കമാൻഡ് ഉപയോഗിക്കാൻ നിങ്ങൾക്ക് അനുവാദമില്ല.")
         return
@@ -45,6 +53,9 @@ async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # 3. Kick ചെയ്യാൻ (/kick)
 async def kick_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.type == "private":
+        return await update.message.reply_text("❌ ഈ കമാൻഡ് ഗ്രൂപ്പിൽ മാത്രമേ ഉപയോഗിക്കാൻ കഴിയൂ.")
+        
     if not await is_admin(update, context):
         await update.message.reply_text("❌ നിങ്ങൾക്ക് ഇതിനുള്ള അനുവാദമില്ല.")
         return
@@ -60,6 +71,9 @@ async def kick_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # 4. Mute ചെയ്യാൻ (/mute)
 async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.type == "private":
+        return await update.message.reply_text("❌ ഈ കമാൻഡ് ഗ്രൂപ്പിൽ മാത്രമേ ഉപയോഗിക്കാൻ കഴിയൂ.")
+        
     if not await is_admin(update, context):
         await update.message.reply_text("❌ നിങ്ങൾക്ക് ഇതിനുള്ള അനുവാദമില്ല.")
         return
@@ -75,6 +89,9 @@ async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # 5. Unmute ചെയ്യാൻ (/unmute)
 async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.type == "private":
+        return await update.message.reply_text("❌ ഈ കമാൻഡ് ഗ്രൂപ്പിൽ മാത്രമേ ഉപയോഗിക്കാൻ കഴിയൂ.")
+        
     if not await is_admin(update, context):
         await update.message.reply_text("❌ നിങ്ങൾക്ക് ഇതിനുള്ള അനുവാദമില്ല.")
         return
@@ -94,11 +111,11 @@ async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"🔊 {target_user.mention_markdown_v2()} അൺമ്യൂട്ട് ചെയ്യപ്പെട്ടു\\.")
 
 def main():
+    # ബോട്ട് ആപ്ലിക്കേഷൻ സ്റ്റാർട്ട് ചെയ്യുന്നു (ഹോസ്റ്റിംഗിൽ എറർ വരാതിരിക്കാൻ ഡിഫോൾട്ട് കോൺഫിഗറേഷൻ)
     application = Application.builder().token(BOT_TOKEN).build()
 
-    # സ്റ്റാർട്ട് കമാൻഡ് ഹാൻഡ്‌ലർ
+    # കമാൻഡുകൾ ലിങ്ക് ചെയ്യുന്നു
     application.add_handler(CommandHandler("start", start_command))
-
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_member))
     application.add_handler(CommandHandler("ban", ban_user))
     application.add_handler(CommandHandler("kick", kick_user))
