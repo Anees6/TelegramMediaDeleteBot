@@ -28,7 +28,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
 )
 
-TOKEN = "8673412670:AAFW2QTdkHH_LxecEzJNE-SkflJZe1X8Y0g"
+TOKEN = "8673412670:AAGCYcqdMWXXnR73MmtEMGIaPR06d2aDZNw"
 
 # പഴയ മെസ്സേജുകളുടെ ഐഡി സൂക്ഷിക്കാനും ആന്റി-ലിങ്ക് സ്റ്റാറ്റസ് അറിയാനുമുള്ള ഗ്ലോബൽ വേരിയബിളുകൾ
 last_warning_message_id = None
