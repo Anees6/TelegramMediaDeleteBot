@@ -1,5 +1,6 @@
 import logging
 import os
+import asyncio
 from datetime import datetime, timedelta, timezone
 from threading import Thread
 from flask import Flask
@@ -52,9 +53,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "**കമാൻഡുകൾ (മെസ്സേജിന് റിപ്ലൈ ആയി അടിക്കുക):**\n"
         "/ban - ബാൻ ചെയ്യാൻ\n"
         "/kick - പുറത്താക്കാൻ\n"
-        "/mute - എപ്പോഴും മ్యూട്ട് ചെയ്യാൻ\n"
+        "/mute - എപ്പോഴും മ്യൂട്ട് ചെയ്യാൻ\n"
         "/tmute [മിനിറ്റ്] - പറഞ്ഞ സമയത്തേക്ക് മ്യൂട്ട് ചെയ്യാൻ (ഉദാ: /tmute 10)\n"
-        "/unmute - മ్యూട്ട് മാറ്റാൻ\n\n"
+        "/unmute - മ്യൂട്ട് മാറ്റാൻ\n\n"
         "**അഡ്മിൻ കമാൻഡുകൾ:**\n"
         "/antilink on - ആന്റി-ലിങ്ക് ഫീച്ചർ ഓൺ ചെയ്യാൻ\n"
         "/antilink off - ആന്റി-ലിങ്ക് ഫീച്ചർ ഓഫ് ചെയ്യാൻ\n"
@@ -133,22 +134,22 @@ async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return
     if not update.message.reply_to_message:
-        await update.message.reply_text("⚠️ ആരെയാണ് മ్యూട്ട് ചെയ്യേണ്ടത് അവരുടെ മെസ്സേജിന് റിപ്ലൈ ആയി ചെയ്യുക.")
+        await update.message.reply_text("⚠️ ആരെയാണ് മ്യൂട്ട് ചെയ്യേണ്ടത് അവരുടെ മെസ്സേജിന് റിപ്ലൈ ആയി ചെയ്യുക.")
         return
     user_to_mute = update.message.reply_to_message.from_user
     no_send_permissions = ChatPermissions(can_send_messages=False)
     try:
         await context.bot.restrict_chat_member(update.effective_chat.id, user_to_mute.id, permissions=no_send_permissions)
-        await update.message.reply_text(f"🔇 {user_to_mute.first_name} മ్యూട്ട് ചെയ്യപ്പെട്ടു.")
+        await update.message.reply_text(f"🔇 {user_to_mute.first_name} മ്യൂട്ട് ചെയ്യപ്പെട്ടു.")
     except Exception as e:
-        await update.message.reply_text(f"മ్యూട്ട് ചെയ്യാൻ പറ്റിയില്ല: {e}")
+        await update.message.reply_text(f"മ്യൂട്ട് ചെയ്യാൻ പറ്റിയില്ല: {e}")
 
 # /tmute കമാൻഡ്
 async def timed_mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return
     if not update.message.reply_to_message:
-        await update.message.reply_text("⚠️ ആരെയാണ് മ్యూട്ട് ചെയ്യേണ്ടത് അവരുടെ മെസ്സേജിന് റിപ്ലൈ ആയി ചെയ്യുക.")
+        await update.message.reply_text("⚠️ ആരെയാണ് മ്യൂട്ട് ചെയ്യേണ്ടത് അവരുടെ മെസ്സേജിന് റിപ്ലൈ ആയി ചെയ്യുക.")
         return
     if not context.args:
         await update.message.reply_text("⚠️ എത്ര മിനിറ്റാണ് മ്യൂട്ട് ചെയ്യേണ്ടത് എന്ന് കൂടി പറയുക. ഉദാഹരണത്തിന്: `/tmute 10`")
@@ -166,7 +167,7 @@ async def timed_mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
             permissions=no_send_permissions, 
             until_date=until_time
         )
-        await update.message.reply_text(f"⏳ {user_to_mute.first_name} {minutes} മിനിറ്റത്തേക്ക് മ్యూട്ട് ചെയ്യപ്പെട്ടു.")
+        await update.message.reply_text(f"⏳ {user_to_mute.first_name} {minutes} മിനിറ്റത്തേക്ക് മ്യൂട്ട് ചെയ്യപ്പെട്ടു.")
     except ValueError:
         await update.message.reply_text("⚠️ സമയം നമ്പറായി തന്നെ നൽകുക (ഉദാഹരണത്തിന്: 10).")
     except Exception as e:
@@ -177,7 +178,7 @@ async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return
     if not update.message.reply_to_message:
-        await update.message.reply_text("⚠️ ആരുടെ മ్యూട്ടാണ് മാറ്റേണ്ടത് അവരുടെ മെസ്സേജിന് റിപ്ലൈ ആയി ചെയ്യുക.")
+        await update.message.reply_text("⚠️ ആരുടെ മ്യൂട്ടാണ് മാറ്റേണ്ടത് അവരുടെ മെസ്സേജിന് റിപ്ലൈ ആയി ചെയ്യുക.")
         return
     user_to_unmute = update.message.reply_to_message.from_user
     full_permissions = ChatPermissions(
@@ -198,7 +199,7 @@ async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"അൺമ്യൂട്ട് ചെയ്യാൻ പറ്റിയില്ല: {e}")
 
-# --- ലിങ്ക് ഒഴികെയുള്ള മറ്റ് ടെക്സ്റ്റ് മെസ്സേജുകൾ ഡിലീറ്റ് ചെയ്യാനും വാണിംഗ് നൽകാനുമുള്ള ഫങ്ഷൻ ---
+# --- ഡിലീറ്റ് ചെയ്യാനും വാണിംഗ് നൽകാനും 1 മിനിറ്റ് മ്യൂട്ട് ചെയ്യാനുമുള്ള ഫങ്ഷൻ ---
 async def handle_normal_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global last_warning_message_id, antilink_status
     
@@ -221,19 +222,38 @@ async def handle_normal_messages(update: Update, context: ContextTypes.DEFAULT_T
         # 1. ഗ്രൂപ്പിൽ വന്ന ലിങ്ക് അല്ലാത്ത ടെക്സ്റ്റ് മെസ്സേജ് ഡിലീറ്റ് ചെയ്യുന്നു
         await context.bot.delete_message(chat_id=chat_id, message_id=update.message.message_id)
 
-        # 2. ബോട്ട് മുൻപ് അയച്ചിട്ടുള്ള വാണിംഗ് മെസ്സേജ് ഗ്രൂപ്പിൽ ഉണ്ടെങ്കിൽ അത് ഡിലീറ്റ് ചെയ്യുന്നു
+        # 2. മെസ്സേജ് അയച്ച ആളെയ 1 മിനിറ്റത്തേക്ക് മ്യൂട്ട് ചെയ്യുന്നു
+        until_time = datetime.now(timezone.utc) + timedelta(minutes=1)
+        no_send_permissions = ChatPermissions(can_send_messages=False)
+        try:
+            await context.bot.restrict_chat_member(
+                chat_id,
+                user.id,
+                permissions=no_send_permissions,
+                until_date=until_time
+            )
+        except Exception as e:
+            print(f"യൂസറെ മ്യൂട്ട് ചെയ്യുന്നതിൽ എറർ: {e}")
+
+        # 3. ബോട്ട് മുൻപ് അയച്ചിട്ടുള്ള വാണിംഗ് മെസ്സേജ് ഗ്രൂപ്പിൽ ഉണ്ടെങ്കിൽ അത് ഡിലീറ്റ് ചെയ്യുന്നു
         if last_warning_message_id is not None:
             try:
                 await context.bot.delete_message(chat_id=chat_id, message_id=last_warning_message_id)
             except Exception:
                 pass
 
-        # 3. മെസ്സേജ് അയച്ച യൂസറെ മെൻഷൻ ചെയ്തുകൊണ്ട് പുതിയ വാണിംഗ് മെസ്സേജ് അയക്കുന്നു
-        warning_text = f"⚠️ {user.mention_html()} ഗ്രൂപ്പിൽ ലിങ്ക് മാത്രം ഇടുക!"
+        # 4. മെസ്സേജ് അയച്ച യൂസറെ മെൻഷൻ ചെയ്തുകൊണ്ട് പുതിയ വാണിംഗ് മെസ്സേജ് അയക്കുന്നു
+        warning_text = f"⚠️ {user.mention_html()} ഗ്രൂപ്പിൽ ലിങ്ക് മാത്രം ഇടുക! നിങ്ങൾക്ക് 1 മിനിറ്റ് മ്യൂട്ട് നൽകിയിട്ടുണ്ട്."
         sent_message = await context.bot.send_message(chat_id=chat_id, text=warning_text, parse_mode="HTML")
         
-        # 4. അടുത്ത തവണ ഡിലീറ്റ് ചെയ്യാൻ വേണ്ടി പുതിയ മെസ്സേജ് ഐഡി സൂക്ഷിച്ചുവെക്കുന്നു
         last_warning_message_id = sent_message.message_id
+
+        # 5. വാണിംഗ് മെസ്സേജ് 5 സെക്കൻഡ് കഴിഞ്ഞ് സ്വയം ഡിലീറ്റ് ആകുന്നു
+        await asyncio.sleep(5)
+        try:
+            await context.bot.delete_message(chat_id=chat_id, message_id=sent_message.message_id)
+        except Exception:
+            pass
 
     except Exception as e:
         print(f"മെസ്സേജ് കൈകാര്യം ചെയ്യുന്നതിൽ എറർ: {e}")
