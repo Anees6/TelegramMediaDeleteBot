@@ -49,7 +49,7 @@ async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
 # /start കമാൻഡ് വരുമ്പോൾ കാണിക്കേണ്ട മെസ്സേജ്
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "ഹലോ! ഞാൻ നിങ്ങളുടെ ഗ്രൂപ്പ് മാനേജ്‌മെന്റ് ബോട്ട് ആണ്.\n\n"
+        "ഹലോ! ഞാൻ നിങ്ങളുടെ ഗ്രൂപ്പ് മാനേജ്‌മെന്റ് ബോട്ട് ആണ് എനെ നിർമിച്ചത് @faseena യാണ്.\n\n"
         "**കമാൻഡുകൾ (മെസ്സേജിന് റിപ്ലൈ ആയി അടിക്കുക):**\n"
         "/ban - ബാൻ ചെയ്യാൻ\n"
         "/kick - പുറത്താക്കാൻ\n"
