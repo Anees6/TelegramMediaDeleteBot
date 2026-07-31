@@ -4,7 +4,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from threading import Thread
 from flask import Flask
-from telegram import Update, ChatPermissions
+from telegram import Update, ChatPermissions, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 # --- FLASK WEB SERVER SETUP ---
@@ -48,18 +48,40 @@ async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
 
 # /start കമാൻഡ് വരുമ്പോൾ കാണിക്കേണ്ട മെസ്സേജ്
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    user_name = user.first_name
+
+    start_text = (
+        f"✨ **ഹലോ {user_name}!** ✨\n\n"
+        "ഞാൻ നിങ്ങളുടെ ഗ്രൂപ്പ് മാനേജ്‌മെന്റ് ബോട്ട് ആണ്. എന്നെ നിർമ്മിച്ചത് @faseena ആണ്.\n\n"
+        "താഴെ കാണുന്ന ബട്ടണുകളിൽ അമർത്തി അഡ്മിൻ കമാൻഡുകൾ മനസ്സിലാക്കാം 👇"
+    )
+
+    # ഇമോജി സ്റ്റൈലിലുള്ള ഇൻലൈൻ ബട്ടണുകൾ
+    keyboard = [
+        [
+            InlineKeyboardButton("🔨 /ban", callback_data="none"),
+            InlineKeyboardButton("👞 /kick", callback_data="none")
+        ],
+        [
+            InlineKeyboardButton("🔇 /mute", callback_data="none"),
+            InlineKeyboardButton("⏳ /tmute", callback_data="none")
+        ],
+        [
+            InlineKeyboardButton("🔊 /unmute", callback_data="none"),
+            InlineKeyboardButton("🔓 /unban", callback_data="none")
+        ],
+        [
+            InlineKeyboardButton("⚙️ /antilink on", callback_data="none"),
+            InlineKeyboardButton("🛑 /antilink off", callback_data="none")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
     await update.message.reply_text(
-        "ഹലോ! ഞാൻ നിങ്ങളുടെ ഗ്രൂപ്പ് മാനേജ്‌മെന്റ് ബോട്ട് ആണ് എനെ നിർമിച്ചത് @faseena യാണ്.\n\n"
-        "**കമാൻഡുകൾ (മെസ്സേജിന് റിപ്ലൈ ആയി അടിക്കുക):**\n"
-        "/ban - ബാൻ ചെയ്യാൻ\n"
-        "/kick - പുറത്താക്കാൻ\n"
-        "/mute - എപ്പോഴും മ്യൂട്ട് ചെയ്യാൻ\n"
-        "/tmute [മിനിറ്റ്] - പറഞ്ഞ സമയത്തേക്ക് മ്യൂട്ട് ചെയ്യാൻ (ഉദാ: /tmute 10)\n"
-        "/unmute - മ്യൂട്ട് മാറ്റാൻ\n\n"
-        "**അഡ്മിൻ കമാൻഡുകൾ:**\n"
-        "/antilink on - ആന്റി-ലിങ്ക് ഫീച്ചർ ഓൺ ചെയ്യാൻ\n"
-        "/antilink off - ആന്റി-ലിങ്ക് ഫീച്ചർ ഓഫ് ചെയ്യാൻ\n"
-        "/unban [user_id] - അൺബാൻ ചെയ്യാൻ"
+        start_text,
+        parse_mode="Markdown",
+        reply_markup=reply_markup
     )
 
 # --- ഓൺ / ഓഫ് ചെയ്യാനുള്ള കമാൻഡ് ഫങ്ഷൻ ---
@@ -72,7 +94,7 @@ async def toggle_antilink(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if not context.args:
-        await update.message.reply_text("⚠️ ഉപയോഗിക്കേണ്ട രീതി: `/antilink on` അല്ലെങ്കിൽ `/antilink off`")
+        await update.message.reply_text("⚠️ ഉപയോഗിക്കേണ്ട രീതി: `/antilink on` അല്ലെങ്കിൽ `/antilink off`", parse_mode="Markdown")
         return
 
     command = context.args[0].lower()
@@ -83,7 +105,7 @@ async def toggle_antilink(update: Update, context: ContextTypes.DEFAULT_TYPE):
         antilink_status = False
         await update.message.reply_text("🛑 ലിങ്ക് ഒഴികെയുള്ള മറ്റ് മെസ്സേജുകൾ ഡിലീറ്റ് ചെയ്യുന്ന സിസ്റ്റം ഓഫ് ആക്കി!")
     else:
-        await update.message.reply_text("⚠️ ദയവായി `on` അല്ലെങ്കിൽ `off` എന്ന് മാത്രം ചേർക്കുക.")
+        await update.message.reply_text("⚠️ ദയവായി `on` അല്ലെങ്കിൽ `off` എന്ന് മാത്രം ചേർക്കുക.", parse_mode="Markdown")
 
 # /ban കമാൻഡ്
 async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -105,7 +127,7 @@ async def unban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return
     if not context.args:
-        await update.message.reply_text("⚠️ ഉപയോഗിക്കേണ്ട രീതി: `/unban [user_id]`")
+        await update.message.reply_text("⚠️ ഉപയോഗിക്കേണ്ട രീതി: `/unban [user_id]`", parse_mode="Markdown")
         return
     try:
         user_id = int(context.args[0])
@@ -152,7 +174,7 @@ async def timed_mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ ആരെയാണ് മ്യൂട്ട് ചെയ്യേണ്ടത് അവരുടെ മെസ്സേജിന് റിപ്ലൈ ആയി ചെയ്യുക.")
         return
     if not context.args:
-        await update.message.reply_text("⚠️ എത്ര മിനിറ്റാണ് മ്യൂട്ട് ചെയ്യേണ്ടത് എന്ന് കൂടി പറയുക. ഉദാഹരണത്തിന്: `/tmute 10`")
+        await update.message.reply_text("⚠️ എത്ര മിനിറ്റാണ് മ്യൂട്ട് ചെയ്യേണ്ടത് എന്ന് കൂടി പറയുക. ഉദാഹരണത്തിന്: `/tmute 10`", parse_mode="Markdown")
         return
 
     try:
@@ -293,7 +315,7 @@ def main():
 
     # കമാൻഡ് ഹാൻഡ്‌ലറുകൾ രജിസ്റ്റർ ചെയ്യുന്നു
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("antilink", toggle_antilink)) # ഓൺ/ഓഫ് ചെയ്യാനുള്ള പുതിയ കമാൻഡ്
+    app.add_handler(CommandHandler("antilink", toggle_antilink)) # ഓൺ/ഓഫ് ചെയ്യാനുള്ള കമാൻഡ്
     app.add_handler(CommandHandler("ban", ban_user))
     app.add_handler(CommandHandler("unban", unban_user))
     app.add_handler(CommandHandler("kick", kick_user))
