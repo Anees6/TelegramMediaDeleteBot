@@ -36,6 +36,9 @@ last_warning_message_id = None
 last_welcome_message_id = None
 antilink_status = True  # തുടക്കത്തിൽ ഈ ഫീച്ചർ ഓൺ ആയിരിക്കും (True)
 
+# പോസ്റ്ററുകളുടെ എണ്ണം ട്രാക്ക് ചെയ്യാനുള്ള ഡിക്ഷണറി
+user_poster_counts = {}
+
 # കമാൻഡ് അടിക്കുന്ന ആൾ ഗ്രൂപ്പിലെ അഡ്മിൻ ആണോ എന്ന് പരിശോധിക്കാനുള്ള ഫങ്ഷൻ
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user_id = update.effective_user.id
@@ -56,11 +59,42 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/mute - എപ്പോഴും മ്യൂട്ട് ചെയ്യാൻ\n"
         "/tmute [മിനിറ്റ്] - പറഞ്ഞ സമയത്തേക്ക് മ്യൂട്ട് ചെയ്യാൻ (ഉദാ: /tmute 10)\n"
         "/unmute - മ്യൂട്ട് മാറ്റാൻ\n\n"
+        "**പൊതു കമാൻഡുകൾ:**\n"
+        "/leaderboard (അല്ലെങ്കിൽ /top) - Top 5 പോസ്റ്റർ ലീഡർബോർഡ് കാണാൻ\n\n"
         "**അഡ്മിൻ കമാൻഡുകൾ:**\n"
         "/antilink on - ആന്റി-ലിങ്ക് ഫീച്ചർ ഓൺ ചെയ്യാൻ\n"
         "/antilink off - ആന്റി-ലിങ്ക് ഫീച്ചർ ഓഫ് ചെയ്യാൻ\n"
         "/unban [user_id] - അൺബാൻ ചെയ്യാൻ"
     )
+
+# --- LEADERBOARD SHOW FUNCTION ---
+async def show_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    
+    if chat_id not in user_poster_counts or not user_poster_counts[chat_id]:
+        await update.message.reply_text("🏆 നിലവിൽ ലീഡർബോർഡിൽ വിവരങ്ങൾ ഒന്നും ലഭ്യമല്ല.")
+        return
+
+    # ഏറ്റവും കൂടുതൽ പോസ്റ്റർ അയച്ചവരെ സോർട്ട് ചെയ്യുന്നു
+    sorted_users = sorted(
+        user_poster_counts[chat_id].values(),
+        key=lambda x: x["count"],
+        reverse=True
+    )
+
+    # Top 5 ആൾക്കാരെ മാത്രം എടുക്കുന്നു
+    top_5 = sorted_users[:5]
+
+    leaderboard_text = "🏆 **TOP 5 POSTERS LEADERBOARD** 🏆\n\n"
+    medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
+
+    for index, user_data in enumerate(top_5):
+        medal = medals[index]
+        name = user_data["name"]
+        count = user_data["count"]
+        leaderboard_text += f"{medal} **{name}** - `{count}` പോസ്റ്ററുകൾ\n"
+
+    await update.message.reply_text(leaderboard_text, parse_mode="Markdown")
 
 # --- ഓൺ / ഓഫ് ചെയ്യാനുള്ള കമാൻഡ് ഫങ്ഷൻ ---
 async def toggle_antilink(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -72,7 +106,7 @@ async def toggle_antilink(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if not context.args:
-        await update.message.reply_text("⚠️ ഉപയോഗിക്കേണ്ട രീതി: `/antilink on` അല്ലെങ്കിൽ `/antilink off`")
+        await update.message.reply_text("⚠️ ഉപയോഗിക്കേണ്ട രീതി: `/antilink on` അല്ലെങ്കിൽ `/antilink off`").
         return
 
     command = context.args[0].lower()
@@ -201,22 +235,33 @@ async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- ഡിലീറ്റ് ചെയ്യാനും വാണിംഗ് നൽകാനും 1 മിനിറ്റ് മ്യൂട്ട് ചെയ്യാനുമുള്ള ഫങ്ഷൻ ---
 async def handle_normal_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global last_warning_message_id, antilink_status
+    global last_warning_message_id, antilink_status, user_poster_counts
     
     # സിസ്റ്റം അഡ്മിൻ ഓഫ് ആക്കിയിട്ടുണ്ടെങ്കിൽ ഈ ഫങ്ഷൻ വർക്ക് ആകില്ല
     if not antilink_status:
         return
 
+    chat_id = update.effective_chat.id
+    user = update.effective_user
+
+    # ലിങ്കുകൾ ഉള്ള മെസ്സേജുകൾ ആണെങ്കിൽ ലീഡർബോർഡ് കൗണ്ട് കൂട്ടുന്നു
+    if update.message.entities and any(entity.type in ["url", "text_link"] for entity in update.message.entities):
+        if chat_id not in user_poster_counts:
+            user_poster_counts[chat_id] = {}
+        
+        if user.id not in user_poster_counts[chat_id]:
+            user_poster_counts[chat_id][user.id] = {
+                "name": user.first_name,
+                "count": 0
+            }
+        
+        user_poster_counts[chat_id][user.id]["count"] += 1
+        user_poster_counts[chat_id][user.id]["name"] = user.first_name
+        return
+
     # അഡ്മിൻമാർ അയക്കുന്ന മെസ്സേജുകൾ ഡിലീറ്റ് ചെയ്യരുത്
     if await is_admin(update, context):
         return
-
-    # മെസ്സേജിൽ ലിങ്കുകൾ (URLs) അടങ്ങിയിട്ടുണ്ടെങ്കിൽ അത് ഡിലീറ്റ് ചെയ്യാതെ ഒഴിവാക്കുന്നു
-    if update.message.entities and any(entity.type in ["url", "text_link"] for entity in update.message.entities):
-        return
-
-    chat_id = update.effective_chat.id
-    user = update.effective_user
 
     try:
         # 1. ഗ്രൂപ്പിൽ വന്ന ലിങ്ക് അല്ലാത്ത ടെക്സ്റ്റ് മെസ്സേജ് ഡിലീറ്റ് ചെയ്യുന്നു
@@ -294,6 +339,7 @@ def main():
     # കമാൻഡ് ഹാൻഡ്‌ലറുകൾ രജിസ്റ്റർ ചെയ്യുന്നു
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("antilink", toggle_antilink)) # ഓൺ/ഓഫ് ചെയ്യാനുള്ള പുതിയ കമാൻഡ്
+    app.add_handler(CommandHandler(["leaderboard", "top"], show_leaderboard)) # ലിഡർ ബോർഡ് കമാൻഡ്
     app.add_handler(CommandHandler("ban", ban_user))
     app.add_handler(CommandHandler("unban", unban_user))
     app.add_handler(CommandHandler("kick", kick_user))
