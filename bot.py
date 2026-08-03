@@ -430,7 +430,7 @@ async def toggle_autolb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for job in current_jobs:
             job.schedule_removal()
 
-        # 15 മിനിറ്റ് (900 സെക്കൻഡ്) കൂടുമ്പോൾ റൺ ആവാൻ സെറ്റ് ചെയ്യുന്നു
+        # 15 മിനിറ്റ് (300 സെക്കൻഡ്) കൂടുമ്പോൾ റൺ ആവാൻ സെറ്റ് ചെയ്യുന്നു
         context.job_queue.run_repeating(
             auto_send_leaderboard,
             interval=900,
