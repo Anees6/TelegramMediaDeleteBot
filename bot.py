@@ -478,7 +478,7 @@ def main():
 
     # 1 മിനിറ്റ് കൂടുമ്പോൾ ഓട്ടോമാറ്റിക് ലീഡർബോർഡ് പ്രവർത്തിക്കാൻ (60 സെക്കൻഡ്)
     if app.job_queue:
-        app.job_queue.run_repeating(auto_send_leaderboards, interval=60, first=10)
+        app.job_queue.run_repeating(auto_send_leaderboards, interval=300, first=10)
 
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, track_messages), group=1)
 
