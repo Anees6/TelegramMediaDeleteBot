@@ -36,8 +36,15 @@ last_welcome_message_id = {} # {chat_id: message_id}
 
 # --- ഓരോ ഗ്രൂപ്പിനും വെവ്വേറെ ഡാറ്റ സൂക്ഷിക്കാൻ ഡാറ്റാ സ്ട്രക്ചർ മാറ്റി ---
 antilink_status = {}  # {chat_id: True/False}
+autolb_status = {}    # {chat_id: True/False} -> ഓരോ ഗ്രൂപ്പിലെയും ഓട്ടോ ലീഡർബോർഡ് സ്റ്റാറ്റസ്
 user_photo_count = {} # {chat_id: {user_id: {"name": str, "count": int}}}
 user_link_count = {}  # {chat_id: {user_id: {"name": str, "count": int}}}
+active_chats = set()  # ആക്ടീവ് ആയ ഗ്രൂപ്പുകളുടെ ചാറ്റ് ഐഡികൾ സൂക്ഷിക്കാൻ
+
+# ഷെയർ ബട്ടണിനായുള്ള Inline Keyboard Markup
+share_keyboard = InlineKeyboardMarkup([
+    [InlineKeyboardButton("🔗 Inline Share", url="https://t.me/share/url?url=https://t.me/+mJhoOlJlNKwzOThl")]
+])
 
 # കമാൻഡ് അടിക്കുന്ന ആൾ ഗ്രൂപ്പിലെ അഡ്മിൻ ആണോ എന്ന് പരിശോധിക്കാനുള്ള ഫങ്ഷൻ
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -76,6 +83,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [
             InlineKeyboardButton("⚙️ /antilink on", callback_data="none"),
             InlineKeyboardButton("🛑 /antilink off", callback_data="none")
+        ],
+        [
+            InlineKeyboardButton("📊 /autolb on", callback_data="none"),
+            InlineKeyboardButton("🛑 /autolb off", callback_data="none")
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -86,7 +97,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
-# --- ഓൺ / ഓഫ് ചെയ്യാനുള്ള കമാൻഡ് ഫങ്ഷൻ (ഗ്രൂപ്പ് അനുസരിച്ച്) ---
+# --- ഓൺ / ഓഫ് ചെയ്യാനുള്ള കമാൻഡ് ഫങ്ഷൻ (antilink) ---
 async def toggle_antilink(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     
@@ -105,6 +116,29 @@ async def toggle_antilink(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif command == "off":
         antilink_status[chat_id] = False
         await update.message.reply_text("🛑 ഈ ഗ്രൂപ്പിൽ ലിങ്ക് ഒഴികെയുള്ള മറ്റ് മെസ്സേജുകൾ ഡിലീറ്റ് ചെയ്യുന്ന സിസ്റ്റം ഓഫ് ആക്കി!")
+    else:
+        await update.message.reply_text("⚠️ ദയവായി `on` അല്ലെങ്കിൽ `off` എന്ന് മാത്രം ചേർക്കുക.", parse_mode="Markdown")
+
+# --- ഓട്ടോ ലീഡർബോർഡ് ഓൺ / ഓഫ് ചെയ്യാനുള്ള കമാൻഡ് ഫങ്ഷൻ (/autolb on / off) ---
+async def toggle_autolb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    
+    if not await is_admin(update, context):
+        await update.message.reply_text("❌ നിങ്ങൾക്ക് ഈ കമാൻഡ് ഉപയോഗിക്കാൻ അധികാരമില്ല!")
+        return
+
+    if not context.args:
+        await update.message.reply_text("⚠️ ഉപയോഗിക്കേണ്ട രീതി: `/autolb on` അല്ലെങ്കിൽ `/autolb off`", parse_mode="Markdown")
+        return
+
+    command = context.args[0].lower()
+    if command == "on":
+        autolb_status[chat_id] = True
+        active_chats.add(chat_id)
+        await update.message.reply_text("✅ ഈ ഗ്രൂപ്പിൽ 1 മിനിറ്റ് കൂടുമ്പോൾ ഓട്ടോമാറ്റിക് ലീഡർബോർഡ് വരുന്നത് ഓൺ ആക്കി!")
+    elif command == "off":
+        autolb_status[chat_id] = False
+        await update.message.reply_text("🛑 ഈ ഗ്രൂപ്പിൽ ഓട്ടോമാറ്റിക് ലീഡർബോർഡ് ഓഫ് ആക്കി!")
     else:
         await update.message.reply_text("⚠️ ദയവായി `on` അല്ലെങ്കിൽ `off` എന്ന് മാത്രം ചേർക്കുക.", parse_mode="Markdown")
 
@@ -315,6 +349,9 @@ async def track_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not msg:
         return
 
+    # ഗ്രൂപ്പിന്റെ ഐഡി ലിസ്റ്റിലേക്ക് ചേർക്കുന്നു
+    active_chats.add(chat_id)
+
     # ഫോട്ടോസ് ട്രാക്ക് ചെയ്യുന്നു
     if msg.photo:
         if chat_id not in user_photo_count:
@@ -347,15 +384,22 @@ async def photo_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("🖼️ നിലവിൽ ഈ ഗ്രൂപ്പിൽ ഫോട്ടോകൾ അയച്ചവരുടെ ഡാറ്റ ലഭ്യമല്ല.")
         return
 
-    sorted_users = sorted(user_photo_count[chat_id].values(), key=lambda x: x["count"], reverse=True)[:5]
+    sorted_users = sorted(user_photo_count[chat_id].items(), key=lambda x: x[1]["count"], reverse=True)[:5]
     
-    text = "🖼️ **TOP 5 PHOTO LEADERBOARD** 🖼️\n\n"
+    text = "🏆 <b><u>TOP 5 PHOTO LEADERBOARD</u></b> 🏆\n\n"
     medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
     
-    for idx, user_info in enumerate(sorted_users):
-        text += f"{medals[idx]} **{user_info['name']}** - {user_info['count']} ഫോട്ടോകൾ\n"
+    for idx, (uid, user_info) in enumerate(sorted_users):
+        text += f"{medals[idx]} <a href='tg://user?id={uid}'>{user_info['name']}</a> — <b>{user_info['count']}</b> ഫോട്ടോകൾ 🔥\n"
         
-    await update.message.reply_text(text, parse_mode="Markdown")
+    sent_msg = await update.message.reply_text(text, parse_mode="HTML", reply_markup=share_keyboard)
+    
+    # 1 മിനിറ്റിന് ശേഷം മെസ്സേജ് താനേ ഡിലീറ്റ് ആകുന്നു
+    await asyncio.sleep(60)
+    try:
+        await context.bot.delete_message(chat_id=chat_id, message_id=sent_msg.message_id)
+    except Exception:
+        pass
 
 # --- 2. Top 5 Links Leaderboard കമാൻഡ് ---
 async def link_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -365,15 +409,66 @@ async def link_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("🔗 നിലവിൽ ഈ ഗ്രൂപ്പിൽ ലിങ്കുകൾ അയച്ചവരുടെ ഡാറ്റ ലഭ്യമല്ല.")
         return
 
-    sorted_users = sorted(user_link_count[chat_id].values(), key=lambda x: x["count"], reverse=True)[:5]
+    sorted_users = sorted(user_link_count[chat_id].items(), key=lambda x: x[1]["count"], reverse=True)[:5]
     
-    text = "🔗 **TOP 5 LINK LEADERBOARD** 🔗\n\n"
+    text = "🏆 <b><u>TOP 5 LINK LEADERBOARD</u></b> 🏆\n\n"
     medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
     
-    for idx, user_info in enumerate(sorted_users):
-        text += f"{medals[idx]} **{user_info['name']}** - {user_info['count']} ലിങ്കുകൾ\n"
+    for idx, (uid, user_info) in enumerate(sorted_users):
+        text += f"{medals[idx]} <a href='tg://user?id={uid}'>{user_info['name']}</a> — <b>{user_info['count']}</b> ലിങ്കുകൾ ⚡\n"
         
-    await update.message.reply_text(text, parse_mode="Markdown")
+    sent_msg = await update.message.reply_text(text, parse_mode="HTML", reply_markup=share_keyboard)
+    
+    # 1 മിനിറ്റിന് ശേഷം മെസ്സേജ് താനേ ഡിലീറ്റ് ആകുന്നു
+    await asyncio.sleep(60)
+    try:
+        await context.bot.delete_message(chat_id=chat_id, message_id=sent_msg.message_id)
+    except Exception:
+        pass
+
+# --- ഓട്ടോമാറ്റിക് ലിഡർ ബോർഡ് അയക്കുന്ന ഫങ്ഷൻ (1 മിനിറ്റ് കൂടുമ്പോൾ) ---
+async def auto_send_leaderboards(context: ContextTypes.DEFAULT_TYPE):
+    for chat_id in list(active_chats):
+        # ഓരോ ഗ്രൂപ്പിലും ഓട്ടോ ലീഡർബോർഡ് ഓൺ ആണോ എന്ന് പരിശോധിക്കുന്നു
+        if not autolb_status.get(chat_id, False):
+            continue
+
+        # 1. ഓട്ടോ ഫോട്ടോ ലീഡർബോർഡ്
+        if chat_id in user_photo_count and user_photo_count[chat_id]:
+            sorted_p = sorted(user_photo_count[chat_id].items(), key=lambda x: x[1]["count"], reverse=True)[:5]
+            text_p = "🏆 <b><u>TOP 5 PHOTO LEADERBOARD</u></b> 🏆\n\n"
+            medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
+            for idx, (uid, uinfo) in enumerate(sorted_p):
+                text_p += f"{medals[idx]} <a href='tg://user?id={uid}'>{uinfo['name']}</a> — <b>{uinfo['count']}</b> ഫോട്ടോകൾ 🔥\n"
+            
+            try:
+                msg_p = await context.bot.send_message(chat_id=chat_id, text=text_p, parse_mode="HTML", reply_markup=share_keyboard)
+                # 1 മിനിറ്റ് (60 സെക്കൻഡ്) കഴിയുമ്പോൾ ഡിലീറ്റ് ചെയ്യുന്നു
+                asyncio.create_task(delete_after_delay(context, chat_id, msg_p.message_id, 60))
+            except Exception as e:
+                print(f"ഓട്ടോ ഫോട്ടോ ലീഡർബോർഡ് എറർ: {e}")
+
+        # 2. ഓട്ടോ ലിങ്ക് ലീഡർബോർഡ്
+        if chat_id in user_link_count and user_link_count[chat_id]:
+            sorted_l = sorted(user_link_count[chat_id].items(), key=lambda x: x[1]["count"], reverse=True)[:5]
+            text_l = "🏆 <b><u>TOP 5 LINK LEADERBOARD</u></b> 🏆\n\n"
+            medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
+            for idx, (uid, uinfo) in enumerate(sorted_l):
+                text_l += f"{medals[idx]} <a href='tg://user?id={uid}'>{uinfo['name']}</a> — <b>{uinfo['count']}</b> ലിങ്കുകൾ ⚡\n"
+            
+            try:
+                msg_l = await context.bot.send_message(chat_id=chat_id, text=text_l, parse_mode="HTML", reply_markup=share_keyboard)
+                # 1 മിനിറ്റ് (60 സെക്കൻഡ്) കഴിയുമ്പോൾ ഡിലീറ്റ് ചെയ്യുന്നു
+                asyncio.create_task(delete_after_delay(context, chat_id, msg_l.message_id, 60))
+            except Exception as e:
+                print(f"ഓട്ടോ ലിങ്ക് ലീഡർബോർഡ് എറർ: {e}")
+
+async def delete_after_delay(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, delay: int):
+    await asyncio.sleep(delay)
+    try:
+        await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+    except Exception:
+        pass
 
 
 def main():
@@ -381,10 +476,15 @@ def main():
 
     app = Application.builder().token(TOKEN).build()
 
+    # 1 മിനിറ്റ് കൂടുമ്പോൾ ഓട്ടോമാറ്റിക് ലീഡർബോർഡ് പ്രവർത്തിക്കാൻ (60 സെക്കൻഡ്)
+    if app.job_queue:
+        app.job_queue.run_repeating(auto_send_leaderboards, interval=60, first=10)
+
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, track_messages), group=1)
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("antilink", toggle_antilink))
+    app.add_handler(CommandHandler("autolb", toggle_autolb)) # പുതിയ ഓൺ/ഓഫ് കമാൻഡ്
     app.add_handler(CommandHandler("ban", ban_user))
     app.add_handler(CommandHandler("unban", unban_user))
     app.add_handler(CommandHandler("kick", kick_user))
