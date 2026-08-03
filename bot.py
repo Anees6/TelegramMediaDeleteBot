@@ -8,7 +8,6 @@ from telegram import Update, ChatPermissions, InlineKeyboardButton, InlineKeyboa
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 # --- FLASK WEB SERVER SETUP ---
-# ബോട്ട് ഹോസ്റ്റിംഗ് പ്ലാറ്റ്‌ഫോമുകളിൽ ഓഫാകാതെ എപ്പോഴും റൺ ചെയ്യാൻ വേണ്ടി ഒരു ഫ്ലാസ്ക് സെർവർ ഉണ്ടാക്കുന്നു
 flask_app = Flask('')
 
 @flask_app.route('/')
@@ -31,14 +30,14 @@ logging.basicConfig(
 
 TOKEN = "8673412670:AAGCYcqdMWXXnR73MmtEMGIaPR06d2aDZNw"
 
-# പഴയ മെസ്സേജുകളുടെ ഐഡി സൂക്ഷിക്കാനും ആന്റി-ലിങ്ക് സ്റ്റാറ്റസ് അറിയാനുമുള്ള ഗ്ലോബൽ വേരിയബിളുകൾ
-last_warning_message_id = None
-last_welcome_message_id = None
-antilink_status = True  # തുടക്കത്തിൽ ഈ ഫീച്ചർ ഓൺ ആയിരിക്കും (True)
+# പഴയ മെസ്സേജുകളുടെ ഐഡി സൂക്ഷിക്കാനുള്ള ഗ്ലോബൽ വേരിയബിളുകൾ
+last_warning_message_id = {} # {chat_id: message_id}
+last_welcome_message_id = {} # {chat_id: message_id}
 
-# --- ലീഡർബോർഡ് ട്രാക്കിങ്ങിനുള്ള വേരിയബിളുകൾ ---
-user_photo_count = {} # {user_id: {"name": str, "count": int}}
-user_link_count = {}  # {user_id: {"name": str, "count": int}}
+# --- ഓരോ ഗ്രൂപ്പിനും വെവ്വേറെ ഡാറ്റ സൂക്ഷിക്കാൻ ഡാറ്റാ സ്ട്രക്ചർ മാറ്റി ---
+antilink_status = {}  # {chat_id: True/False}
+user_photo_count = {} # {chat_id: {user_id: {"name": str, "count": int}}}
+user_link_count = {}  # {chat_id: {user_id: {"name": str, "count": int}}}
 
 # കമാൻഡ് അടിക്കുന്ന ആൾ ഗ്രൂപ്പിലെ അഡ്മിൻ ആണോ എന്ന് പരിശോധിക്കാനുള്ള ഫങ്ഷൻ
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -61,7 +60,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "താഴെ കാണുന്ന ബട്ടണുകളിൽ അമർത്തി അഡ്മിൻ കമാൻഡുകൾ മനസ്സിലാക്കാം 👇"
     )
 
-    # ഇമോജി സ്റ്റൈലിലുള്ള ഇൻലൈൻ ബട്ടണുകൾ
     keyboard = [
         [
             InlineKeyboardButton("🔨 /ban", callback_data="none"),
@@ -88,11 +86,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
-# --- ഓൺ / ഓഫ് ചെയ്യാനുള്ള കമാൻഡ് ഫങ്ഷൻ ---
+# --- ഓൺ / ഓഫ് ചെയ്യാനുള്ള കമാൻഡ് ഫങ്ഷൻ (ഗ്രൂപ്പ് അനുസരിച്ച്) ---
 async def toggle_antilink(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global antilink_status
+    chat_id = update.effective_chat.id
     
-    # കമാൻഡ് അടിക്കുന്നത് അഡ്മിൻ ആണെന്ന് ഉറപ്പുവരുത്തുന്നു
     if not await is_admin(update, context):
         await update.message.reply_text("❌ നിങ്ങൾക്ക് ഈ കമാൻഡ് ഉപയോഗിക്കാൻ അധികാരമില്ല!")
         return
@@ -103,11 +100,11 @@ async def toggle_antilink(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     command = context.args[0].lower()
     if command == "on":
-        antilink_status = True
-        await update.message.reply_text("✅ ലിങ്ക് ഒഴികെയുള്ള മറ്റ് മെസ്സേജുകൾ ഡിലീറ്റ് ചെയ്യുന്ന സിസ്റ്റം ഓൺ ആക്കി!")
+        antilink_status[chat_id] = True
+        await update.message.reply_text("✅ ഈ ഗ്രൂപ്പിൽ ലിങ്ക് ഒഴികെയുള്ള മറ്റ് മെസ്സേജുകൾ ഡിലീറ്റ് ചെയ്യുന്ന സിസ്റ്റം ഓൺ ആക്കി!")
     elif command == "off":
-        antilink_status = False
-        await update.message.reply_text("🛑 ലിങ്ക് ഒഴികെയുള്ള മറ്റ് മെസ്സേജുകൾ ഡിലീറ്റ് ചെയ്യുന്ന സിസ്റ്റം ഓഫ് ആക്കി!")
+        antilink_status[chat_id] = False
+        await update.message.reply_text("🛑 ഈ ഗ്രൂപ്പിൽ ലിങ്ക് ഒഴികെയുള്ള മറ്റ് മെസ്സേജുകൾ ഡിലീറ്റ് ചെയ്യുന്ന സിസ്റ്റം ഓഫ് ആക്കി!")
     else:
         await update.message.reply_text("⚠️ ദയവായി `on` അല്ലെങ്കിൽ `off` എന്ന് മാത്രം ചേർക്കുക.", parse_mode="Markdown")
 
@@ -225,24 +222,23 @@ async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"അൺമ്യൂട്ട് ചെയ്യാൻ പറ്റിയില്ല: {e}")
 
-# --- ഡിലീറ്റ് ചെയ്യാനും വാണിംഗ് നൽകാനും 1 മിനിറ്റ് മ്യൂട്ട് ചെയ്യാനുമുള്ള ഫങ്ഷൻ ---
+# --- ഡിലീറ്റ് ചെയ്യാനും വാണിംഗ് നൽകാനുമുള്ള ഫങ്ഷൻ ---
 async def handle_normal_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global last_warning_message_id, antilink_status
-    
-    # സിസ്റ്റം അഡ്മിൻ ഓഫ് ആക്കിയിട്ടുണ്ടെങ്കിൽ ഈ ഫങ്ഷൻ വർക്ക് ആകില്ല
-    if not antilink_status:
+    chat_id = update.effective_chat.id
+    user = update.effective_user
+
+    # ഈ ഗ്രൂപ്പിൽ antilink ഓൺ ആണോ എന്ന് നോക്കുന്നു (ഡിഫോൾട്ടായി True)
+    is_on = antilink_status.get(chat_id, True)
+    if not is_on:
         return
 
     # അഡ്മിൻമാർ അയക്കുന്ന മെസ്സേജുകൾ ഡിലീറ്റ് ചെയ്യരുത്
     if await is_admin(update, context):
         return
 
-    # മെസ്സേജിൽ ലിങ്കുകൾ (URLs) അടങ്ങിയിട്ടുണ്ടെങ്കിൽ അത് ഡിലീറ്റ് ചെയ്യാതെ ഒഴിവാക്കുന്നു
+    # മെസ്സേജിൽ ലിങ്കുകൾ ഉണ്ടെങ്കിൽ ഒഴിവാക്കുന്നു
     if update.message.entities and any(entity.type in ["url", "text_link"] for entity in update.message.entities):
         return
-
-    chat_id = update.effective_chat.id
-    user = update.effective_user
 
     try:
         # 1. ഗ്രൂപ്പിൽ വന്ന ലിങ്ക് അല്ലാത്ത ടെക്സ്റ്റ് മെസ്സേജ് ഡിലീറ്റ് ചെയ്യുന്നു
@@ -261,20 +257,20 @@ async def handle_normal_messages(update: Update, context: ContextTypes.DEFAULT_T
         except Exception as e:
             print(f"യൂസറെ മ്യൂട്ട് ചെയ്യുന്നതിൽ എറർ: {e}")
 
-        # 3. ബോട്ട് മുൻപ് അയച്ചിട്ടുള്ള വാണിംഗ് മെസ്സേജ് ഗ്രൂപ്പിൽ ഉണ്ടെങ്കിൽ അത് ഡിലീറ്റ് ചെയ്യുന്നു
-        if last_warning_message_id is not None:
+        # 3. മുൻപത്തെ വാണിംഗ് മെസ്സേജ് ഡിലീറ്റ് ചെയ്യുന്നു
+        if chat_id in last_warning_message_id:
             try:
-                await context.bot.delete_message(chat_id=chat_id, message_id=last_warning_message_id)
+                await context.bot.delete_message(chat_id=chat_id, message_id=last_warning_message_id[chat_id])
             except Exception:
                 pass
 
-        # 4. മെസ്സേജ് അയച്ച യൂസറെ മെൻഷൻ ചെയ്തുകൊണ്ട് പുതിയ വാണിംഗ് മെസ്സേജ് അയക്കുന്നു
+        # 4. പുതിയ വാണിംഗ് മെസ്സേജ് അയക്കുന്നു
         warning_text = f"⚠️ {user.mention_html()} ഗ്രൂപ്പിൽ ലിങ്ക് മാത്രം ഇടുക! നിങ്ങൾക്ക് 1 മിനിറ്റ് മ്യൂട്ട് നൽകിയിട്ടുണ്ട്."
         sent_message = await context.bot.send_message(chat_id=chat_id, text=warning_text, parse_mode="HTML")
         
-        last_warning_message_id = sent_message.message_id
+        last_warning_message_id[chat_id] = sent_message.message_id
 
-        # 5. വാണിംഗ് മെസ്സേജ് 5 സെക്കൻഡ് കഴിഞ്ഞ് സ്വയം ഡിലീറ്റ് ആകുന്നു
+        # 5. വാണിംഗ് മെസ്സേജ് 5 സെക്കൻഡ് കഴിഞ്ഞ് ഡിലീറ്റ് ആകുന്നു
         await asyncio.sleep(5)
         try:
             await context.bot.delete_message(chat_id=chat_id, message_id=sent_message.message_id)
@@ -284,9 +280,8 @@ async def handle_normal_messages(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         print(f"മെസ്സേജ് കൈകാര്യം ചെയ്യുന്നതിൽ എറർ: {e}")
 
-# --- പുതിയ മെമ്പർമാർ വരുമ്പോൾ സ്വാഗതം ചെയ്യാനുള്ള ഫങ്ഷൻ ---
+# --- വെൽക്കം മെസ്സേജ് ---
 async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global last_welcome_message_id
     chat_id = update.effective_chat.id
     
     for new_member in update.message.new_chat_members:
@@ -294,26 +289,25 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
             continue
             
         try:
-            # പുതിയ ആളുകൾ വരുമ്പോൾ പഴയ വെൽക്കം മെസ്സേജ് ഡിലീറ്റ് ചെയ്യുന്നു
-            if last_welcome_message_id is not None:
+            if chat_id in last_welcome_message_id:
                 try:
-                    await context.bot.delete_message(chat_id=chat_id, message_id=last_welcome_message_id)
+                    await context.bot.delete_message(chat_id=chat_id, message_id=last_welcome_message_id[chat_id])
                 except Exception:
                     pass
 
-            # ഗ്രൂപ്പിലേക്ക് പുതിയ ആളുകളെ സ്വാഗതം ചെയ്യുന്നു
             welcome_text = f"👋 ഹലോ {new_member.mention_html()}, നമ്മുടെ ഗ്രൂപ്പിലേക്ക് സ്വാഗതം!"
             sent_message = await context.bot.send_message(chat_id=chat_id, text=welcome_text, parse_mode="HTML")
-            last_welcome_message_id = sent_message.message_id
+            last_welcome_message_id[chat_id] = sent_message.message_id
             
         except Exception as e:
             print(f"വെൽക്കം പറയുന്നതിൽ എറർ: {e}")
 
-# --- ഫോട്ടോകളും ലിങ്കുകളും മാത്രം ട്രാക്ക് ചെയ്യാനുള്ള ഫങ്ഷൻ ---
+# --- ഓരോ ഗ്രൂപ്പിലെയും ഫോട്ടോകളും ലിങ്കുകളും വേറെയായി ട്രാക്ക് ചെയ്യാൻ ---
 async def track_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.effective_user or update.effective_user.is_bot:
         return
 
+    chat_id = update.effective_chat.id
     user_id = update.effective_user.id
     user_name = update.effective_user.first_name
     msg = update.message
@@ -321,14 +315,16 @@ async def track_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not msg:
         return
 
-    # 1. ഫോട്ടോസ് മാത്രം ട്രാക്ക് ചെയ്യുന്നു
+    # ഫോട്ടോസ് ട്രാക്ക് ചെയ്യുന്നു
     if msg.photo:
-        if user_id not in user_photo_count:
-            user_photo_count[user_id] = {"name": user_name, "count": 0}
-        user_photo_count[user_id]["count"] += 1
-        user_photo_count[user_id]["name"] = user_name
+        if chat_id not in user_photo_count:
+            user_photo_count[chat_id] = {}
+        if user_id not in user_photo_count[chat_id]:
+            user_photo_count[chat_id][user_id] = {"name": user_name, "count": 0}
+        user_photo_count[chat_id][user_id]["count"] += 1
+        user_photo_count[chat_id][user_id]["name"] = user_name
 
-    # 2. ലിങ്കുകൾ മാത്രം ട്രാക്ക് ചെയ്യുന്നു
+    # ലിങ്കുകൾ ട്രാക്ക് ചെയ്യുന്നു
     has_link = False
     if msg.entities and any(e.type in ["url", "text_link"] for e in msg.entities):
         has_link = True
@@ -336,18 +332,22 @@ async def track_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         has_link = True
 
     if has_link:
-        if user_id not in user_link_count:
-            user_link_count[user_id] = {"name": user_name, "count": 0}
-        user_link_count[user_id]["count"] += 1
-        user_link_count[user_id]["name"] = user_name
+        if chat_id not in user_link_count:
+            user_link_count[chat_id] = {}
+        if user_id not in user_link_count[chat_id]:
+            user_link_count[chat_id][user_id] = {"name": user_name, "count": 0}
+        user_link_count[chat_id][user_id]["count"] += 1
+        user_link_count[chat_id][user_id]["name"] = user_name
 
-# --- 1. Top 5 Photos Leaderboard കമാൻഡ് (/photoleaderboard) ---
+# --- 1. Top 5 Photos Leaderboard കമാൻഡ് ---
 async def photo_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not user_photo_count:
-        await update.message.reply_text("🖼️ നിലവിൽ ഫോട്ടോകൾ അയച്ചവരുടെ ഡാറ്റ ലഭ്യമല്ല.")
+    chat_id = update.effective_chat.id
+    
+    if chat_id not in user_photo_count or not user_photo_count[chat_id]:
+        await update.message.reply_text("🖼️ നിലവിൽ ഈ ഗ്രൂപ്പിൽ ഫോട്ടോകൾ അയച്ചവരുടെ ഡാറ്റ ലഭ്യമല്ല.")
         return
 
-    sorted_users = sorted(user_photo_count.values(), key=lambda x: x["count"], reverse=True)[:5]
+    sorted_users = sorted(user_photo_count[chat_id].values(), key=lambda x: x["count"], reverse=True)[:5]
     
     text = "🖼️ **TOP 5 PHOTO LEADERBOARD** 🖼️\n\n"
     medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
@@ -357,13 +357,15 @@ async def photo_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     await update.message.reply_text(text, parse_mode="Markdown")
 
-# --- 2. Top 5 Links Leaderboard കമാൻഡ് (/linkleaderboard) ---
+# --- 2. Top 5 Links Leaderboard കമാൻഡ് ---
 async def link_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not user_link_count:
-        await update.message.reply_text("🔗 നിലവിൽ ലിങ്കുകൾ അയച്ചവരുടെ ഡാറ്റ ലഭ്യമല്ല.")
+    chat_id = update.effective_chat.id
+
+    if chat_id not in user_link_count or not user_link_count[chat_id]:
+        await update.message.reply_text("🔗 നിലവിൽ ഈ ഗ്രൂപ്പിൽ ലിങ്കുകൾ അയച്ചവരുടെ ഡാറ്റ ലഭ്യമല്ല.")
         return
 
-    sorted_users = sorted(user_link_count.values(), key=lambda x: x["count"], reverse=True)[:5]
+    sorted_users = sorted(user_link_count[chat_id].values(), key=lambda x: x["count"], reverse=True)[:5]
     
     text = "🔗 **TOP 5 LINK LEADERBOARD** 🔗\n\n"
     medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
@@ -375,18 +377,14 @@ async def link_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def main():
-    # വെബ് സെർവർ റൺ ചെയ്യിക്കുന്നു
     keep_alive()
 
-    # ബോട്ട് ടോക്കൺ വെച്ച് ആപ്ലിക്കേഷൻ ബിൽഡ് ചെയ്യുന്നു
     app = Application.builder().token(TOKEN).build()
 
-    # ഫോട്ടോകളും ലിങ്കുകളും ട്രാക്ക് ചെയ്യാനുള്ള ഹാൻഡ്‌ലർ ചേർക്കുന്നു
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, track_messages), group=1)
 
-    # കമാൻഡ് ഹാൻഡ്‌ലറുകൾ രജിസ്റ്റർ ചെയ്യുന്നു
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("antilink", toggle_antilink)) # ഓൺ/ഓഫ് ചെയ്യാനുള്ള കമാൻഡ്
+    app.add_handler(CommandHandler("antilink", toggle_antilink))
     app.add_handler(CommandHandler("ban", ban_user))
     app.add_handler(CommandHandler("unban", unban_user))
     app.add_handler(CommandHandler("kick", kick_user))
@@ -394,16 +392,12 @@ def main():
     app.add_handler(CommandHandler("tmute", timed_mute_user))
     app.add_handler(CommandHandler("unmute", unmute_user))
     
-    # പുതിയ കമാൻഡുകൾ
     app.add_handler(CommandHandler("photoleaderboard", photo_leaderboard))
     app.add_handler(CommandHandler("photolb", photo_leaderboard))
     app.add_handler(CommandHandler("linkleaderboard", link_leaderboard))
     app.add_handler(CommandHandler("linklb", link_leaderboard))
 
-    # ഗ്രൂപ്പിലേക്ക് പുതിയ ആളുകൾ കയറുന്നത് നിരീക്ഷിക്കാൻ
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
-
-    # ഗ്രൂപ്പിൽ വരുന്ന മെസ്സേജുകൾ പരിശോധിക്കാനും ലിങ്ക് അല്ലാത്തവ ഡിലീറ്റ് ചെയ്യാനുമുള്ള ഹാൻഡ്‌ലർ
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_normal_messages))
 
     print("ബോട്ട് പൂർണ്ണ സജ്ജമാണ്...")
