@@ -34,7 +34,7 @@ TOKEN = "8673412670:AAGCYcqdMWXXnR73MmtEMGIaPR06d2aDZNw"
 last_warning_message_id = {} # {chat_id: message_id}
 last_welcome_message_id = {} # {chat_id: message_id}
 
-# --- ഓരോ ഗ്രൂപ്പിനും വെവ്വേറെ ഡാറ്റ സൂക്ഷിക്കാൻ ഡാറ്റാ സ്ട്രക്ചർ മാറ്റി ---
+# --- ഓരോ ഗ്രൂപ്പിനും വെവ്വേറെ ഡാറ്റ സൂക്ഷിക്കാൻ ഡാറ്റാ സ്ട്രക്ചർ ---
 antilink_status = {}  # {chat_id: True/False}
 autolb_status = {}    # {chat_id: True/False} -> ഓരോ ഗ്രൂപ്പിലെയും ഓട്ടോ ലീഡർബോർഡ് സ്റ്റാറ്റസ്
 user_photo_count = {} # {chat_id: {user_id: {"name": str, "count": int}}}
@@ -135,7 +135,7 @@ async def toggle_autolb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if command == "on":
         autolb_status[chat_id] = True
         active_chats.add(chat_id)
-        await update.message.reply_text("✅ ഈ ഗ്രൂപ്പിൽ 1 മിനിറ്റ് കൂടുമ്പോൾ ഓട്ടോമാറ്റിക് ലീഡർബോർഡ് വരുന്നത് ഓൺ ആക്കി!")
+        await update.message.reply_text("✅ ഈ ഗ്രൂപ്പിൽ 15 മിനിറ്റ് കൂടുമ്പോൾ ഓട്ടോമാറ്റിക് ലീഡർബോർഡ് വരുന്നത് ഓൺ ആക്കി!")
     elif command == "off":
         autolb_status[chat_id] = False
         await update.message.reply_text("🛑 ഈ ഗ്രൂപ്പിൽ ഓട്ടോമാറ്റിക് ലീഡർബോർഡ് ഓഫ് ആക്കി!")
@@ -394,8 +394,8 @@ async def photo_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     sent_msg = await update.message.reply_text(text, parse_mode="HTML", reply_markup=share_keyboard)
     
-    # 1 മിനിറ്റിന് ശേഷം മെസ്സേജ് താനേ ഡിലീറ്റ് ആകുന്നു
-    await asyncio.sleep(60)
+    # 900 സെക്കൻഡിന് (15 മിനിറ്റിന്) ശേഷം മെസ്സേജ് താനേ ഡിലീറ്റ് ആകുന്നു
+    await asyncio.sleep(900)
     try:
         await context.bot.delete_message(chat_id=chat_id, message_id=sent_msg.message_id)
     except Exception:
@@ -419,14 +419,14 @@ async def link_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     sent_msg = await update.message.reply_text(text, parse_mode="HTML", reply_markup=share_keyboard)
     
-    # 1 മിനിറ്റിന് ശേഷം മെസ്സേജ് താനേ ഡിലീറ്റ് ആകുന്നു
-    await asyncio.sleep(60)
+    # 900 സെക്കൻഡിന് (15 മിനിറ്റിന്) ശേഷം മെസ്സേജ് താനേ ഡിലീറ്റ് ആകുന്നു
+    await asyncio.sleep(900)
     try:
         await context.bot.delete_message(chat_id=chat_id, message_id=sent_msg.message_id)
     except Exception:
         pass
 
-# --- ഓട്ടോമാറ്റിക് ലിഡർ ബോർഡ് അയക്കുന്ന ഫങ്ഷൻ (1 മിനിറ്റ് കൂടുമ്പോൾ) ---
+# --- ഓട്ടോമാറ്റിക് ലിഡർ ബോർഡ് അയക്കുന്ന ഫങ്ഷൻ (15 മിനിറ്റ് കൂടുമ്പോൾ അയക്കുകയും അന്നേരത്തെ കണക്ക് റീസെറ്റ് ചെയ്യുകയും ചെയ്യും) ---
 async def auto_send_leaderboards(context: ContextTypes.DEFAULT_TYPE):
     for chat_id in list(active_chats):
         # ഓരോ ഗ്രൂപ്പിലും ഓട്ടോ ലീഡർബോർഡ് ഓൺ ആണോ എന്ന് പരിശോധിക്കുന്നു
@@ -436,32 +436,38 @@ async def auto_send_leaderboards(context: ContextTypes.DEFAULT_TYPE):
         # 1. ഓട്ടോ ഫോട്ടോ ലീഡർബോർഡ്
         if chat_id in user_photo_count and user_photo_count[chat_id]:
             sorted_p = sorted(user_photo_count[chat_id].items(), key=lambda x: x[1]["count"], reverse=True)[:5]
-            text_p = "🏆 <b><u>TOP 5 PHOTO LEADERBOARD</u></b> 🏆\n\n"
+            text_p = "🏆 <b><u>TOP 5 PHOTO LEADERBOARD (LAST 15 MINS)</u></b> 🏆\n\n"
             medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
             for idx, (uid, uinfo) in enumerate(sorted_p):
                 text_p += f"{medals[idx]} <a href='tg://user?id={uid}'>{uinfo['name']}</a> — <b>{uinfo['count']}</b> ഫോട്ടോകൾ 🔥\n"
             
             try:
                 msg_p = await context.bot.send_message(chat_id=chat_id, text=text_p, parse_mode="HTML", reply_markup=share_keyboard)
-                # 1 മിനിറ്റ് (60 സെക്കൻഡ്) കഴിയുമ്പോൾ ഡിലീറ്റ് ചെയ്യുന്നു
-                asyncio.create_task(delete_after_delay(context, chat_id, msg_p.message_id, 60))
+                # 15 മിനിറ്റ് (900 സെക്കൻഡ്) കഴിയുമ്പോൾ ഡിലീറ്റ് ചെയ്യുന്നു
+                asyncio.create_task(delete_after_delay(context, chat_id, msg_p.message_id, 900))
             except Exception as e:
                 print(f"ഓട്ടോ ഫോട്ടോ ലീഡർബോർഡ് എറർ: {e}")
+            
+            # ഈ 15 മിനിറ്റിലെ കണക്ക് അയച്ചു കഴിഞ്ഞാൽ ഫോട്ടോ ഡാറ്റ ക്ലിയർ ചെയ്യും (റീസെറ്റ്)
+            user_photo_count[chat_id].clear()
 
         # 2. ഓട്ടോ ലിങ്ക് ലീഡർബോർഡ്
         if chat_id in user_link_count and user_link_count[chat_id]:
             sorted_l = sorted(user_link_count[chat_id].items(), key=lambda x: x[1]["count"], reverse=True)[:5]
-            text_l = "🏆 <b><u>TOP 5 LINK LEADERBOARD</u></b> 🏆\n\n"
+            text_l = "🏆 <b><u>TOP 5 LINK LEADERBOARD (LAST 15 MINS)</u></b> 🏆\n\n"
             medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
             for idx, (uid, uinfo) in enumerate(sorted_l):
                 text_l += f"{medals[idx]} <a href='tg://user?id={uid}'>{uinfo['name']}</a> — <b>{uinfo['count']}</b> ലിങ്കുകൾ ⚡\n"
             
             try:
                 msg_l = await context.bot.send_message(chat_id=chat_id, text=text_l, parse_mode="HTML", reply_markup=share_keyboard)
-                # 1 മിനിറ്റ് (60 സെക്കൻഡ്) കഴിയുമ്പോൾ ഡിലീറ്റ് ചെയ്യുന്നു
-                asyncio.create_task(delete_after_delay(context, chat_id, msg_l.message_id, 60))
+                # 15 മിനിറ്റ് (900 സെക്കൻഡ്) കഴിയുമ്പോൾ ഡിലീറ്റ് ചെയ്യുന്നു
+                asyncio.create_task(delete_after_delay(context, chat_id, msg_l.message_id, 900))
             except Exception as e:
                 print(f"ഓട്ടോ ലിങ്ക് ലീഡർബോർഡ് എറർ: {e}")
+            
+            # ഈ 15 മിനിറ്റിലെ കണക്ക് അയച്ചു കഴിഞ്ഞാൽ ലിങ്ക് ഡാറ്റ ക്ലിയർ ചെയ്യും (റീസെറ്റ്)
+            user_link_count[chat_id].clear()
 
 async def delete_after_delay(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, delay: int):
     await asyncio.sleep(delay)
@@ -476,7 +482,7 @@ def main():
 
     app = Application.builder().token(TOKEN).build()
 
-    # 1 മിനിറ്റ് കൂടുമ്പോൾ ഓട്ടോമാറ്റിക് ലീഡർബോർഡ് പ്രവർത്തിക്കാൻ (60 സെക്കൻഡ്)
+    # 15 മിനിറ്റ് കൂടുമ്പോൾ ഓട്ടോമാറ്റിക് ലീഡർബോർഡ് പ്രവർത്തിക്കാൻ (900 സെക്കൻഡ്)
     if app.job_queue:
         app.job_queue.run_repeating(auto_send_leaderboards, interval=900, first=10)
 
@@ -484,7 +490,7 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("antilink", toggle_antilink))
-    app.add_handler(CommandHandler("autolb", toggle_autolb)) # പുതിയ ഓൺ/ഓഫ് കമാൻഡ്
+    app.add_handler(CommandHandler("autolb", toggle_autolb))
     app.add_handler(CommandHandler("ban", ban_user))
     app.add_handler(CommandHandler("unban", unban_user))
     app.add_handler(CommandHandler("kick", kick_user))
