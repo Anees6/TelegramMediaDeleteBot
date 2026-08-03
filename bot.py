@@ -97,7 +97,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
-# --- ഓൺ / ഓഫ് ചെയ്യാനുള്ള കമാൻഡ് ഫങ്ഷൻ (antilink) ---
+# --- ഓൺ / ഓഫ് ചെയ്യാനുള്ള കമാൻഡ് ഫങ്ഷൻ (antilink - Per Group Independent) ---
 async def toggle_antilink(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     
@@ -112,14 +112,14 @@ async def toggle_antilink(update: Update, context: ContextTypes.DEFAULT_TYPE):
     command = context.args[0].lower()
     if command == "on":
         antilink_status[chat_id] = True
-        await update.message.reply_text("✅ ഈ ഗ്രൂപ്പിൽ ലിങ്ക് ഒഴികെയുള്ള മറ്റ് മെസ്സേജുകൾ ഡിലീറ്റ് ചെയ്യുന്ന സിസ്റ്റം ഓൺ ആക്കി!")
+        await update.message.reply_text("✅ ഈ ഗ്രൂപ്പിൽ AntiLink സിസ്റ്റം ഓൺ ആക്കി!")
     elif command == "off":
         antilink_status[chat_id] = False
-        await update.message.reply_text("🛑 ഈ ഗ്രൂപ്പിൽ ലിങ്ക് ഒഴികെയുള്ള മറ്റ് മെസ്സേജുകൾ ഡിലീറ്റ് ചെയ്യുന്ന സിസ്റ്റം ഓഫ് ആക്കി!")
+        await update.message.reply_text("🛑 ഈ ഗ്രൂപ്പിൽ AntiLink സിസ്റ്റം ഓഫ് ആക്കി!")
     else:
         await update.message.reply_text("⚠️ ദയവായി `on` അല്ലെങ്കിൽ `off` എന്ന് മാത്രം ചേർക്കുക.", parse_mode="Markdown")
 
-# --- ഓട്ടോ ലീഡർബോർഡ് ഓൺ / ഓഫ് ചെയ്യാനുള്ള കമാൻഡ് ഫങ്ഷൻ (/autolb on / off) ---
+# --- ഓട്ടോ ലീഡർബോർഡ് ഓൺ / ഓഫ് ചെയ്യാനുള്ള കമാൻഡ് ഫങ്ഷൻ (/autolb on / off - Per Group Independent) ---
 async def toggle_autolb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     
@@ -256,63 +256,71 @@ async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"അൺമ്യൂട്ട് ചെയ്യാൻ പറ്റിയില്ല: {e}")
 
-# --- ഡിലീറ്റ് ചെയ്യാനും വാണിംഗ് നൽകാനുമുള്ള ഫങ്ഷൻ ---
+# --- ഡിലീറ്റ് ചെയ്യാനും വാണിംഗ് നൽകാനുമുള്ള ഫങ്ഷൻ (സെറ്റിംഗ്സ് ബാധിക്കാത്ത രീതിയിൽ തിരുത്തിയത്) ---
 async def handle_normal_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.effective_chat or not update.message:
+        return
+
     chat_id = update.effective_chat.id
     user = update.effective_user
 
-    # ഈ ഗ്രൂപ്പിൽ antilink ഓൺ ആണോ എന്ന് നോക്കുന്നു (ഡിഫോൾട്ടായി True)
-    is_on = antilink_status.get(chat_id, True)
+    # ഈ ഗ്രൂപ്പിൽ antilink ഡിഫോൾട്ടായി False ആണ് (തനിയെ പ്രവർത്തിക്കില്ല, /antilink on അടിച്ചാൽ മാത്രം ഓണാകും)
+    is_on = antilink_status.get(chat_id, False)
     if not is_on:
         return
 
-    # അഡ്മിൻമാർ അയക്കുന്ന മെസ്സേജുകൾ ഡിലീറ്റ് ചെയ്യരുത്
+    # അഡ്മിൻമാർ അയക്കുന്ന മെസ്സേജുകൾ ഒഴിവാക്കുന്നു
     if await is_admin(update, context):
         return
 
-    # മെസ്സേജിൽ ലിങ്കുകൾ ഉണ്ടെങ്കിൽ ഒഴിവാക്കുന്നു
+    # മെസ്സേജിൽ ലിങ്ക് പരിശോധിക്കുന്നു
+    has_link = False
     if update.message.entities and any(entity.type in ["url", "text_link"] for entity in update.message.entities):
-        return
+        has_link = True
+    elif update.message.caption_entities and any(entity.type in ["url", "text_link"] for entity in update.message.caption_entities):
+        has_link = True
 
-    try:
-        # 1. ഗ്രൂപ്പിൽ വന്ന ലിങ്ക് അല്ലാത്ത ടെക്സ്റ്റ് മെസ്സേജ് ഡിലീറ്റ് ചെയ്യുന്നു
-        await context.bot.delete_message(chat_id=chat_id, message_id=update.message.message_id)
-
-        # 2. മെസ്സേജ് അയച്ച ആളെയ 1 മിനിറ്റത്തേക്ക് മ്യൂട്ട് ചെയ്യുന്നു
-        until_time = datetime.now(timezone.utc) + timedelta(minutes=1)
-        no_send_permissions = ChatPermissions(can_send_messages=False)
+    # ലിങ്ക് ഇല്ലാത്ത സാധാരണ ടെക്സ്റ്റ് മെസ്സേജ് വന്നാൽ മാത്രം ഡിലീറ്റ് ചെയ്യുക
+    if not has_link:
         try:
-            await context.bot.restrict_chat_member(
-                chat_id,
-                user.id,
-                permissions=no_send_permissions,
-                until_date=until_time
-            )
-        except Exception as e:
-            print(f"യൂസറെ മ്യൂട്ട് ചെയ്യുന്നതിൽ എറർ: {e}")
+            # 1. ഗ്രൂപ്പിൽ വന്ന ലിങ്ക് അല്ലാത്ത മെസ്സേജ് ഡിലീറ്റ് ചെയ്യുന്നു
+            await context.bot.delete_message(chat_id=chat_id, message_id=update.message.message_id)
 
-        # 3. മുൻപത്തെ വാണിംഗ് മെസ്സേജ് ഡിലീറ്റ് ചെയ്യുന്നു
-        if chat_id in last_warning_message_id:
+            # 2. മെസ്സേജ് അയച്ച ആളെയ 1 മിനിറ്റത്തേക്ക് മ്യൂട്ട് ചെയ്യുന്നു
+            until_time = datetime.now(timezone.utc) + timedelta(minutes=1)
+            no_send_permissions = ChatPermissions(can_send_messages=False)
             try:
-                await context.bot.delete_message(chat_id=chat_id, message_id=last_warning_message_id[chat_id])
+                await context.bot.restrict_chat_member(
+                    chat_id,
+                    user.id,
+                    permissions=no_send_permissions,
+                    until_date=until_time
+                )
+            except Exception as e:
+                print(f"യൂസറെ മ്യൂട്ട് ചെയ്യുന്നതിൽ എറർ: {e}")
+
+            # 3. മുൻപത്തെ വാണിംഗ് മെസ്സേജ് ഡിലീറ്റ് ചെയ്യുന്നു
+            if chat_id in last_warning_message_id:
+                try:
+                    await context.bot.delete_message(chat_id=chat_id, message_id=last_warning_message_id[chat_id])
+                except Exception:
+                    pass
+
+            # 4. പുതിയ വാണിംഗ് മെസ്സേജ് അയക്കുന്നു
+            warning_text = f"⚠️ {user.mention_html()} ഗ്രൂപ്പിൽ ലിങ്ക് മാത്രം ഇടുക! നിങ്ങൾക്ക് 1 മിനിറ്റ് മ്യൂട്ട് നൽകിയിട്ടുണ്ട്."
+            sent_message = await context.bot.send_message(chat_id=chat_id, text=warning_text, parse_mode="HTML")
+            
+            last_warning_message_id[chat_id] = sent_message.message_id
+
+            # 5. വാണിംഗ് മെസ്സേജ് 5 സെക്കൻഡ് കഴിഞ്ഞ് ഡിലീറ്റ് ആകുന്നു
+            await asyncio.sleep(5)
+            try:
+                await context.bot.delete_message(chat_id=chat_id, message_id=sent_message.message_id)
             except Exception:
                 pass
 
-        # 4. പുതിയ വാണിംഗ് മെസ്സേജ് അയക്കുന്നു
-        warning_text = f"⚠️ {user.mention_html()} ഗ്രൂപ്പിൽ ലിങ്ക് മാത്രം ഇടുക! നിങ്ങൾക്ക് 1 മിനിറ്റ് മ്യൂട്ട് നൽകിയിട്ടുണ്ട്."
-        sent_message = await context.bot.send_message(chat_id=chat_id, text=warning_text, parse_mode="HTML")
-        
-        last_warning_message_id[chat_id] = sent_message.message_id
-
-        # 5. വാണിംഗ് മെസ്സേജ് 5 സെക്കൻഡ് കഴിഞ്ഞ് ഡിലീറ്റ് ആകുന്നു
-        await asyncio.sleep(5)
-        try:
-            await context.bot.delete_message(chat_id=chat_id, message_id=sent_message.message_id)
-        except Exception:
-            pass
-
-    except Exception as e:
-        print(f"മെസ്സേജ് കൈകാര്യം ചെയ്യുന്നതിൽ എറർ: {e}")
+        except Exception as e:
+            print(f"മെസ്സേജ് കൈകാര്യം ചെയ്യുന്നതിൽ എറർ: {e}")
 
 # --- വെൽക്കം മെസ്സേജ് ---
 async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -426,7 +434,7 @@ async def link_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
 
-# --- ഓട്ടോമാറ്റിക് ലിഡർ ബോർഡ് അയക്കുന്ന ഫങ്ഷൻ (15 മിനിറ്റ് കൂടുമ്പോൾ അയക്കുകയും അന്നേരത്തെ കണക്ക് റീസെറ്റ് ചെയ്യുകയും ചെയ്യും) ---
+# --- ഓട്ടോമാറ്റിക് ലിഡർ ബോർഡ് അയക്കുന്ന ഫങ്ഷൻ ---
 async def auto_send_leaderboards(context: ContextTypes.DEFAULT_TYPE):
     for chat_id in list(active_chats):
         # ഓരോ ഗ്രൂപ്പിലും ഓട്ടോ ലീഡർബോർഡ് ഓൺ ആണോ എന്ന് പരിശോധിക്കുന്നു
@@ -443,12 +451,10 @@ async def auto_send_leaderboards(context: ContextTypes.DEFAULT_TYPE):
             
             try:
                 msg_p = await context.bot.send_message(chat_id=chat_id, text=text_p, parse_mode="HTML", reply_markup=share_keyboard)
-                # 15 മിനിറ്റ് (900 സെക്കൻഡ്) കഴിയുമ്പോൾ ഡിലീറ്റ് ചെയ്യുന്നു
                 asyncio.create_task(delete_after_delay(context, chat_id, msg_p.message_id, 900))
             except Exception as e:
                 print(f"ഓട്ടോ ഫോട്ടോ ലീഡർബോർഡ് എറർ: {e}")
             
-            # ഈ 15 മിനിറ്റിലെ കണക്ക് അയച്ചു കഴിഞ്ഞാൽ ഫോട്ടോ ഡാറ്റ ക്ലിയർ ചെയ്യും (റീസെറ്റ്)
             user_photo_count[chat_id].clear()
 
         # 2. ഓട്ടോ ലിങ്ക് ലീഡർബോർഡ്
@@ -461,12 +467,10 @@ async def auto_send_leaderboards(context: ContextTypes.DEFAULT_TYPE):
             
             try:
                 msg_l = await context.bot.send_message(chat_id=chat_id, text=text_l, parse_mode="HTML", reply_markup=share_keyboard)
-                # 15 മിനിറ്റ് (900 സെക്കൻഡ്) കഴിയുമ്പോൾ ഡിലീറ്റ് ചെയ്യുന്നു
                 asyncio.create_task(delete_after_delay(context, chat_id, msg_l.message_id, 900))
             except Exception as e:
                 print(f"ഓട്ടോ ലിങ്ക് ലീഡർബോർഡ് എറർ: {e}")
             
-            # ഈ 15 മിനിറ്റിലെ കണക്ക് അയച്ചു കഴിഞ്ഞാൽ ലിങ്ക് ഡാറ്റ ക്ലിയർ ചെയ്യും (റീസെറ്റ്)
             user_link_count[chat_id].clear()
 
 async def delete_after_delay(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, delay: int):
@@ -504,7 +508,7 @@ def main():
     app.add_handler(CommandHandler("linklb", link_leaderboard))
 
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
-    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_normal_messages))
+    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_normal_messages), group=2)
 
     print("ബോട്ട് പൂർണ്ണ സജ്ജമാണ്...")
     app.run_polling()
