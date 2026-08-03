@@ -36,6 +36,10 @@ last_warning_message_id = None
 last_welcome_message_id = None
 antilink_status = True  # തുടക്കത്തിൽ ഈ ഫീച്ചർ ഓൺ ആയിരിക്കും (True)
 
+# --- ലീഡർബോർഡ് ട്രാക്കിങ്ങിനുള്ള വേരിയബിളുകൾ ---
+user_msg_count = {}   # {user_id: {"name": str, "count": int}}
+user_media_count = {} # {user_id: {"name": str, "count": int}}
+
 # കമാൻഡ് അടിക്കുന്ന ആൾ ഗ്രൂപ്പിലെ അഡ്മിൻ ആണോ എന്ന് പരിശോധിക്കാനുള്ള ഫങ്ഷൻ
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user_id = update.effective_user.id
@@ -305,6 +309,60 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
         except Exception as e:
             print(f"വെൽക്കം പറയുന്നതിൽ എറർ: {e}")
 
+# --- പുതിയ ഫങ്ഷനുകൾ: മെസ്സേജുകളും മീഡിയകളും ട്രാക്ക് ചെയ്യാൻ ---
+async def track_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.effective_user or update.effective_user.is_bot:
+        return
+
+    user_id = update.effective_user.id
+    user_name = update.effective_user.first_name
+
+    # മെസ്സേജുകളുടെ കൗണ്ട് കൂട്ടുന്നു
+    if user_id not in user_msg_count:
+        user_msg_count[user_id] = {"name": user_name, "count": 0}
+    user_msg_count[user_id]["count"] += 1
+    user_msg_count[user_id]["name"] = user_name
+
+    # മീഡിയകൾ ആണോ എന്ന് പരിശോധിക്കുന്നു (Photo, Video, Document, Audio, Animation, Voice, Video Note)
+    msg = update.message
+    if msg and (msg.photo or msg.video or msg.document or msg.audio or msg.animation or msg.voice or msg.video_note):
+        if user_id not in user_media_count:
+            user_media_count[user_id] = {"name": user_name, "count": 0}
+        user_media_count[user_id]["count"] += 1
+        user_media_count[user_id]["name"] = user_name
+
+# --- 1. Top 5 Messages Leaderboard കമാൻഡ് (/leaderboard) ---
+async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not user_msg_count:
+        await update.message.reply_text("📊 നിലവിൽ മെസ്സേജ് ഡാറ്റകളൊന്നും ലഭ്യമല്ല.")
+        return
+
+    sorted_users = sorted(user_msg_count.values(), key=lambda x: x["count"], reverse=True)[:5]
+    
+    text = "🏆 **TOP 5 MESSAGE LEADERBOARD** 🏆\n\n"
+    medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
+    
+    for idx, user_info in enumerate(sorted_users):
+        text += f"{medals[idx]} **{user_info['name']}** - {user_info['count']} മെസ്സേജുകൾ\n"
+        
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+# --- 2. Top 5 Media Leaderboard കമാൻഡ് (/medialeaderboard) ---
+async def media_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not user_media_count:
+        await update.message.reply_text("🖼️ നിലവിൽ മീഡിയ അയച്ചവരുടെ ഡാറ്റകളൊന്നും ലഭ്യമല്ല.")
+        return
+
+    sorted_users = sorted(user_media_count.values(), key=lambda x: x["count"], reverse=True)[:5]
+    
+    text = "📸 **TOP 5 MEDIA LEADERBOARD** 📸\n\n"
+    medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
+    
+    for idx, user_info in enumerate(sorted_users):
+        text += f"{medals[idx]} **{user_info['name']}** - {user_info['count']} മീഡിയകൾ\n"
+        
+    await update.message.reply_text(text, parse_mode="Markdown")
+
 
 def main():
     # വെബ് സെർവർ റൺ ചെയ്യിക്കുന്നു
@@ -312,6 +370,9 @@ def main():
 
     # ബോട്ട് ടോക്കൺ വെച്ച് ആപ്ലിക്കേഷൻ ബിൽഡ് ചെയ്യുന്നു
     app = Application.builder().token(TOKEN).build()
+
+    # മെസ്സേജുകളും മീഡിയകളും ട്രാക്ക് ചെയ്യാനുള്ള ഹാൻഡ്‌ലർ ആദ്യം നൽകുന്നു (group=1 വഴി)
+    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, track_messages), group=1)
 
     # കമാൻഡ് ഹാൻഡ്‌ലറുകൾ രജിസ്റ്റർ ചെയ്യുന്നു
     app.add_handler(CommandHandler("start", start))
@@ -322,6 +383,11 @@ def main():
     app.add_handler(CommandHandler("mute", mute_user))
     app.add_handler(CommandHandler("tmute", timed_mute_user))
     app.add_handler(CommandHandler("unmute", unmute_user))
+    
+    # പുതിയ കമാൻഡുകൾ
+    app.add_handler(CommandHandler("leaderboard", leaderboard))
+    app.add_handler(CommandHandler("medialeaderboard", media_leaderboard))
+    app.add_handler(CommandHandler("medialb", media_leaderboard))
 
     # ഗ്രൂപ്പിലേക്ക് പുതിയ ആളുകൾ കയറുന്നത് നിരീക്ഷിക്കാൻ
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
