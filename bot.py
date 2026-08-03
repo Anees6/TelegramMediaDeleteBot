@@ -30,11 +30,11 @@ logging.basicConfig(
 
 TOKEN = "8673412670:AAGCYcqdMWXXnR73MmtEMGIaPR06d2aDZNw"
 
-# പഴയ മെസ്സേജുകളുടെ ഐഡി സൂക്ഷിക്കാനുള്ള ഗ്ലോബൽ വേരിയബിളുകൾ
+# പഴയ മെസ്സേജുകളുടെ ഐഡി സൂക്ഷിക്കാനുള്ള വേരിയബിളുകൾ
 last_warning_message_id = {} # {chat_id: message_id}
 last_welcome_message_id = {} # {chat_id: message_id}
 
-# --- ഓരോ ഗ്രൂപ്പിനും വെവ്വേറെ ഡാറ്റ സൂക്ഷിക്കാൻ ഡാറ്റാ സ്ട്രക്ചർ മാറ്റി ---
+# --- ഓരോ ഗ്രൂപ്പിനും വെവ്വേറെ ഡാറ്റ സൂക്ഷിക്കാൻ ഡാറ്റാ സ്ട്രക്ചർ ---
 antilink_status = {}  # {chat_id: True/False}
 user_photo_count = {} # {chat_id: {user_id: {"name": str, "count": int}}}
 user_link_count = {}  # {chat_id: {user_id: {"name": str, "count": int}}}
@@ -86,7 +86,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
-# --- ഓൺ / ഓഫ് ചെയ്യാനുള്ള കമാൻഡ് ഫങ്ഷൻ (ഗ്രൂപ്പ് അനുസരിച്ച്) ---
+# --- ഓൺ / ഓഫ് ചെയ്യാനുള്ള കമാൻഡ് ഫങ്ഷൻ ---
 async def toggle_antilink(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     
@@ -227,24 +227,19 @@ async def handle_normal_messages(update: Update, context: ContextTypes.DEFAULT_T
     chat_id = update.effective_chat.id
     user = update.effective_user
 
-    # ഈ ഗ്രൂപ്പിൽ antilink ഓൺ ആണോ എന്ന് നോക്കുന്നു (ഡിഫോൾട്ടായി True)
     is_on = antilink_status.get(chat_id, True)
     if not is_on:
         return
 
-    # അഡ്മിൻമാർ അയക്കുന്ന മെസ്സേജുകൾ ഡിലീറ്റ് ചെയ്യരുത്
     if await is_admin(update, context):
         return
 
-    # മെസ്സേജിൽ ലിങ്കുകൾ ഉണ്ടെങ്കിൽ ഒഴിവാക്കുന്നു
     if update.message.entities and any(entity.type in ["url", "text_link"] for entity in update.message.entities):
         return
 
     try:
-        # 1. ഗ്രൂപ്പിൽ വന്ന ലിങ്ക് അല്ലാത്ത ടെക്സ്റ്റ് മെസ്സേജ് ഡിലീറ്റ് ചെയ്യുന്നു
         await context.bot.delete_message(chat_id=chat_id, message_id=update.message.message_id)
 
-        # 2. മെസ്സേജ് അയച്ച ആളെയ 1 മിനിറ്റത്തേക്ക് മ്യൂട്ട് ചെയ്യുന്നു
         until_time = datetime.now(timezone.utc) + timedelta(minutes=1)
         no_send_permissions = ChatPermissions(can_send_messages=False)
         try:
@@ -257,20 +252,17 @@ async def handle_normal_messages(update: Update, context: ContextTypes.DEFAULT_T
         except Exception as e:
             print(f"യൂസറെ മ്യൂട്ട് ചെയ്യുന്നതിൽ എറർ: {e}")
 
-        # 3. മുൻപത്തെ വാണിംഗ് മെസ്സേജ് ഡിലീറ്റ് ചെയ്യുന്നു
         if chat_id in last_warning_message_id:
             try:
                 await context.bot.delete_message(chat_id=chat_id, message_id=last_warning_message_id[chat_id])
             except Exception:
                 pass
 
-        # 4. പുതിയ വാണിംഗ് മെസ്സേജ് അയക്കുന്നു
         warning_text = f"⚠️ {user.mention_html()} ഗ്രൂപ്പിൽ ലിങ്ക് മാത്രം ഇടുക! നിങ്ങൾക്ക് 1 മിനിറ്റ് മ്യൂട്ട് നൽകിയിട്ടുണ്ട്."
         sent_message = await context.bot.send_message(chat_id=chat_id, text=warning_text, parse_mode="HTML")
         
         last_warning_message_id[chat_id] = sent_message.message_id
 
-        # 5. വാണിംഗ് മെസ്സേജ് 5 സെക്കൻഡ് കഴിഞ്ഞ് ഡിലീറ്റ് ആകുന്നു
         await asyncio.sleep(5)
         try:
             await context.bot.delete_message(chat_id=chat_id, message_id=sent_message.message_id)
@@ -302,7 +294,7 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
         except Exception as e:
             print(f"വെൽക്കം പറയുന്നതിൽ എറർ: {e}")
 
-# --- ഓരോ ഗ്രൂപ്പിലെയും ഫോട്ടോകളും ലിങ്കുകളും വേറെയായി ട്രാക്ക് ചെയ്യാൻ ---
+# --- ട്രാക്കിംഗ് ഫങ്ഷൻ ---
 async def track_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.effective_user or update.effective_user.is_bot:
         return
@@ -315,7 +307,6 @@ async def track_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not msg:
         return
 
-    # ഫോട്ടോസ് ട്രാക്ക് ചെയ്യുന്നു
     if msg.photo:
         if chat_id not in user_photo_count:
             user_photo_count[chat_id] = {}
@@ -324,7 +315,6 @@ async def track_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_photo_count[chat_id][user_id]["count"] += 1
         user_photo_count[chat_id][user_id]["name"] = user_name
 
-    # ലിങ്കുകൾ ട്രാക്ക് ചെയ്യുന്നു
     has_link = False
     if msg.entities and any(e.type in ["url", "text_link"] for e in msg.entities):
         has_link = True
@@ -339,7 +329,7 @@ async def track_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_link_count[chat_id][user_id]["count"] += 1
         user_link_count[chat_id][user_id]["name"] = user_name
 
-# --- 1. Top 5 Photos Leaderboard കമാൻഡ് ---
+# --- 1. Photos Leaderboard കമാൻഡ് ---
 async def photo_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     
@@ -357,7 +347,7 @@ async def photo_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     await update.message.reply_text(text, parse_mode="Markdown")
 
-# --- 2. Top 5 Links Leaderboard കമാൻഡ് ---
+# --- 2. Links Leaderboard കമാൻഡ് ---
 async def link_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
 
@@ -374,6 +364,90 @@ async def link_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += f"{medals[idx]} **{user_info['name']}** - {user_info['count']} ലിങ്കുകൾ\n"
         
     await update.message.reply_text(text, parse_mode="Markdown")
+
+
+# --- ഓട്ടോ ഫങ്ഷനുകൾ (ഓരോ 15 മിനിറ്റിലും റൺ ചെയ്യാൻ) ---
+
+# 1 മിനിറ്റ് കഴിഞ്ഞ് ബോട്ടിന്റെ മെസ്സേജ് ഡിലീറ്റ് ചെയ്യുന്ന ജോബ്
+async def delete_leaderboard_msg(context: ContextTypes.DEFAULT_TYPE):
+    job = context.job
+    try:
+        await context.bot.delete_message(chat_id=job.data["chat_id"], message_id=job.data["message_id"])
+    except Exception:
+        pass
+
+# 15 മിനിറ്റ് കൂടുമ്പോൾ ബോട്ട് സ്വയം അയക്കുന്ന ലീഡർബോർഡ് ഫങ്ഷൻ
+async def auto_send_leaderboard(context: ContextTypes.DEFAULT_TYPE):
+    chat_id = context.job.chat_id
+    medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
+    
+    text = "📊 **AUTOMATIC LEADERBOARD UPDATE** 📊\n\n"
+
+    # Photo leaderboard ചേർക്കുന്നു
+    if chat_id in user_photo_count and user_photo_count[chat_id]:
+        sorted_photos = sorted(user_photo_count[chat_id].values(), key=lambda x: x["count"], reverse=True)[:5]
+        text += "🖼️ **Top Photo Sharers:**\n"
+        for idx, user_info in enumerate(sorted_photos):
+            text += f"{medals[idx]} **{user_info['name']}** - {user_info['count']} ഫോട്ടോകൾ\n"
+        text += "\n"
+
+    # Link leaderboard ചേർക്കുന്നു
+    if chat_id in user_link_count and user_link_count[chat_id]:
+        sorted_links = sorted(user_link_count[chat_id].values(), key=lambda x: x["count"], reverse=True)[:5]
+        text += "🔗 **Top Link Sharers:**\n"
+        for idx, user_info in enumerate(sorted_links):
+            text += f"{medals[idx]} **{user_info['name']}** - {user_info['count']} ലിങ്കുകൾ\n"
+
+    # ഡാറ്റ ഉണ്ടെങ്കിൽ മാത്രം അയക്കുന്നു
+    if text != "📊 **AUTOMATIC LEADERBOARD UPDATE** 📊\n\n":
+        msg = await context.bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown")
+        
+        # 1 മിനിറ്റ് (60 സെക്കൻഡ്) കഴിഞ്ഞ് ഡിലീറ്റ് ചെയ്യാൻ ഷെഡ്യൂൾ ചെയ്യുന്നു
+        context.job_queue.run_once(
+            delete_leaderboard_msg, 
+            60, 
+            data={"chat_id": chat_id, "message_id": msg.message_id}
+        )
+
+# ഓട്ടോമാറ്റിക് ലീഡർബോർഡ് On/Off ചെയ്യാനുള്ള കമാൻഡ് (/autolb on /autolb off)
+async def toggle_autolb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
+    if not await is_admin(update, context):
+        await update.message.reply_text("❌ നിങ്ങൾക്ക് ഈ കമാൻഡ് ഉപയോഗിക്കാൻ അധികാരമില്ല!")
+        return
+
+    if not context.args:
+        await update.message.reply_text("⚠️ ഉപയോഗിക്കേണ്ട രീതി: `/autolb on` അല്ലെങ്കിൽ `/autolb off`", parse_mode="Markdown")
+        return
+
+    command = context.args[0].lower()
+    job_name = f"autolb_{chat_id}"
+
+    if command == "on":
+        # പഴയ ജോബ് ഉണ്ടെങ്കിൽ റിമൂവ് ചെയ്യുന്നു
+        current_jobs = context.job_queue.get_jobs_by_name(job_name)
+        for job in current_jobs:
+            job.schedule_removal()
+
+        # 15 മിനിറ്റ് (900 സെക്കൻഡ്) കൂടുമ്പോൾ റൺ ആവാൻ സെറ്റ് ചെയ്യുന്നു
+        context.job_queue.run_repeating(
+            auto_send_leaderboard,
+            interval=900,
+            first=10, # കമാൻഡ് അടിച്ച് 10 സെക്കൻഡിനകം ആദ്യ മെസ്സേജ് വരും
+            chat_id=chat_id,
+            name=job_name
+        )
+        await update.message.reply_text("✅ ഈ ഗ്രൂപ്പിൽ ഓരോ 15 മിനിറ്റിലും ഓട്ടോ-ലീഡർബോർഡ് (1 മിനിറ്റിൽ ഡിലീറ്റ് ആകുന്നത്) ഓൺ ആക്കി!")
+
+    elif command == "off":
+        current_jobs = context.job_queue.get_jobs_by_name(job_name)
+        for job in current_jobs:
+            job.schedule_removal()
+        await update.message.reply_text("🛑 ഓട്ടോ-ലീഡർബോർഡ് ഓഫ് ആക്കി!")
+
+    else:
+        await update.message.reply_text("⚠️ ദയവായി `on` അല്ലെങ്കിൽ `off` എന്ന് മാത്രം ചേർക്കുക.", parse_mode="Markdown")
 
 
 def main():
@@ -396,6 +470,9 @@ def main():
     app.add_handler(CommandHandler("photolb", photo_leaderboard))
     app.add_handler(CommandHandler("linkleaderboard", link_leaderboard))
     app.add_handler(CommandHandler("linklb", link_leaderboard))
+    
+    # ഓട്ടോ ലീഡർബോർഡ് കമാൻഡ്
+    app.add_handler(CommandHandler("autolb", toggle_autolb))
 
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_normal_messages))
