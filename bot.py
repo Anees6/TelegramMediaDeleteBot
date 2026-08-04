@@ -420,7 +420,7 @@ async def link_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sent_msg = await update.message.reply_text(text, parse_mode="HTML", reply_markup=share_keyboard)
     
     # 1 മിനിറ്റിന് ശേഷം മെസ്സേജ് താനേ ഡിലീറ്റ് ആകുന്നു
-    await asyncio.sleep(60)
+    await asyncio.sleep(900)
     try:
         await context.bot.delete_message(chat_id=chat_id, message_id=sent_msg.message_id)
     except Exception:
@@ -443,7 +443,7 @@ async def auto_send_leaderboards(context: ContextTypes.DEFAULT_TYPE):
             
             try:
                 msg_p = await context.bot.send_message(chat_id=chat_id, text=text_p, parse_mode="HTML", reply_markup=share_keyboard)
-                # 1 മിനിറ്റ് (60 സെക്കൻഡ്) കഴിയുമ്പോൾ ഡിലീറ്റ് ചെയ്യുന്നു
+                # 1 മിനിറ്റ് (900 സെക്കൻഡ്) കഴിയുമ്പോൾ ഡിലീറ്റ് ചെയ്യുന്നു
                 asyncio.create_task(delete_after_delay(context, chat_id, msg_p.message_id, 60))
             except Exception as e:
                 print(f"ഓട്ടോ ഫോട്ടോ ലീഡർബോർഡ് എറർ: {e}")
@@ -458,8 +458,8 @@ async def auto_send_leaderboards(context: ContextTypes.DEFAULT_TYPE):
             
             try:
                 msg_l = await context.bot.send_message(chat_id=chat_id, text=text_l, parse_mode="HTML", reply_markup=share_keyboard)
-                # 1 മിനിറ്റ് (60 സെക്കൻഡ്) കഴിയുമ്പോൾ ഡിലീറ്റ് ചെയ്യുന്നു
-                asyncio.create_task(delete_after_delay(context, chat_id, msg_l.message_id, 60))
+                # 1 മിനിറ്റ് (900 സെക്കൻഡ്) കഴിയുമ്പോൾ ഡിലീറ്റ് ചെയ്യുന്നു
+                asyncio.create_task(delete_after_delay(context, chat_id, msg_l.message_id, 900))
             except Exception as e:
                 print(f"ഓട്ടോ ലിങ്ക് ലീഡർബോർഡ് എറർ: {e}")
 
@@ -476,7 +476,7 @@ def main():
 
     app = Application.builder().token(TOKEN).build()
 
-    # 1 മിനിറ്റ് കൂടുമ്പോൾ ഓട്ടോമാറ്റിക് ലീഡർബോർഡ് പ്രവർത്തിക്കാൻ (60 സെക്കൻഡ്)
+    # 1 മിനിറ്റ് കൂടുമ്പോൾ ഓട്ടോമാറ്റിക് ലീഡർബോർഡ് പ്രവർത്തിക്കാൻ (900 സെക്കൻഡ്)
     if app.job_queue:
         app.job_queue.run_repeating(auto_send_leaderboards, interval=900, first=10)
 
