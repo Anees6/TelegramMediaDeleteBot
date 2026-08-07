@@ -34,6 +34,10 @@ TOKEN = "8673412670:AAGd09Zfk-RSY83drPF01ZJqniJkrLWDJh4"
 last_warning_message_id = {} # {chat_id: message_id}
 last_welcome_message_id = {} # {chat_id: message_id}
 
+# പഴയ ലീഡർബോർഡ് മെസ്സേജ് ഐഡി സൂക്ഷിക്കാൻ
+last_photo_lb_message_id = {} # {chat_id: message_id}
+last_link_lb_message_id = {}  # {chat_id: message_id}
+
 # --- ഓരോ ഗ്രൂപ്പിനും വെവ്വേറെ ഡാറ്റ സൂക്ഷിക്കാൻ ഡാറ്റാ സ്ട്രക്ചർ മാറ്റി ---
 antilink_status = {}  # {chat_id: True/False}
 autolb_status = {}    # {chat_id: True/False} -> ഓരോ ഗ്രൂപ്പിലെയും ഓട്ടോ ലീഡർബോർഡ് സ്റ്റാറ്റസ്
@@ -135,7 +139,7 @@ async def toggle_autolb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if command == "on":
         autolb_status[chat_id] = True
         active_chats.add(chat_id)
-        await update.message.reply_text("✅ ഈ ഗ്രൂപ്പിൽ 1 മിനിറ്റ് കൂടുമ്പോൾ ഓട്ടോമാറ്റിക് ലീഡർബോർഡ് വരുന്നത് ഓൺ ആക്കി!")
+        await update.message.reply_text("✅ ഈ ഗ്രൂപ്പിൽ 15 മിനിറ്റ് കൂടുമ്പോൾ ഓട്ടോമാറ്റിക് ലീഡർബോർഡ് വരുന്നത് ഓൺ ആക്കി!")
     elif command == "off":
         autolb_status[chat_id] = False
         await update.message.reply_text("🛑 ഈ ഗ്രൂപ്പിൽ ഓട്ടോമാറ്റിക് ലീഡർബോർഡ് ഓഫ് ആക്കി!")
@@ -392,14 +396,21 @@ async def photo_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for idx, (uid, user_info) in enumerate(sorted_users):
         text += f"{medals[idx]} <a href='tg://user?id={uid}'>{user_info['name']}</a> — <b>{user_info['count']}</b> ഫോട്ടോകൾ 🔥\n"
         
+    # പഴയ ലീഡർബോർഡ് ഉണ്ടെങ്കിൽ ഡിലീറ്റ് ചെയ്യുന്നു
+    if chat_id in last_photo_lb_message_id:
+        try:
+            await context.bot.delete_message(chat_id=chat_id, message_id=last_photo_lb_message_id[chat_id])
+        except Exception:
+            pass
+
     sent_msg = await update.message.reply_text(text, parse_mode="HTML", reply_markup=share_keyboard)
+    last_photo_lb_message_id[chat_id] = sent_msg.message_id
     
-    # 1 മിനിറ്റിന് ശേഷം മെസ്സേജ് താനേ ഡിലീറ്റ് ആകുന്നു
-    await asyncio.sleep(60)
+    # ഗ്രൂപ്പിൽ മെസ്സേജ് Pin ചെയ്യുന്നു
     try:
-        await context.bot.delete_message(chat_id=chat_id, message_id=sent_msg.message_id)
-    except Exception:
-        pass
+        await context.bot.pin_chat_message(chat_id=chat_id, message_id=sent_msg.message_id, disable_notification=True)
+    except Exception as e:
+        print(f"Pin ചെയ്യുന്നതിൽ എറർ: {e}")
 
 # --- 2. Top 5 Links Leaderboard കമാൻഡ് ---
 async def link_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -417,16 +428,23 @@ async def link_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for idx, (uid, user_info) in enumerate(sorted_users):
         text += f"{medals[idx]} <a href='tg://user?id={uid}'>{user_info['name']}</a> — <b>{user_info['count']}</b> ലിങ്കുകൾ ⚡\n"
         
-    sent_msg = await update.message.reply_text(text, parse_mode="HTML", reply_markup=share_keyboard)
-    
-    # 1 മിനിറ്റിന് ശേഷം മെസ്സേജ് താനേ ഡിലീറ്റ് ആകുന്നു
-    await asyncio.sleep(60)
-    try:
-        await context.bot.delete_message(chat_id=chat_id, message_id=sent_msg.message_id)
-    except Exception:
-        pass
+    # പഴയ ലീഡർബോർഡ് ഉണ്ടെങ്കിൽ ഡിലീറ്റ് ചെയ്യുന്നു
+    if chat_id in last_link_lb_message_id:
+        try:
+            await context.bot.delete_message(chat_id=chat_id, message_id=last_link_lb_message_id[chat_id])
+        except Exception:
+            pass
 
-# --- ഓട്ടോമാറ്റിക് ലിഡർ ബോർഡ് അയക്കുന്ന ഫങ്ഷൻ (1 മിനിറ്റ് കൂടുമ്പോൾ) ---
+    sent_msg = await update.message.reply_text(text, parse_mode="HTML", reply_markup=share_keyboard)
+    last_link_lb_message_id[chat_id] = sent_msg.message_id
+    
+    # ഗ്രൂപ്പിൽ മെസ്സേജ് Pin ചെയ്യുന്നു
+    try:
+        await context.bot.pin_chat_message(chat_id=chat_id, message_id=sent_msg.message_id, disable_notification=True)
+    except Exception as e:
+        print(f"Pin ചെയ്യുന്നതിൽ എറർ: {e}")
+
+# --- ഓട്ടോമാറ്റിക് ലിഡർ ബോർഡ് അയക്കുന്ന ഫങ്ഷൻ (15 മിനിറ്റ് കൂടുമ്പോൾ) ---
 async def auto_send_leaderboards(context: ContextTypes.DEFAULT_TYPE):
     for chat_id in list(active_chats):
         # ഓരോ ഗ്രൂപ്പിലും ഓട്ടോ ലീഡർബോർഡ് ഓൺ ആണോ എന്ന് പരിശോധിക്കുന്നു
@@ -442,9 +460,22 @@ async def auto_send_leaderboards(context: ContextTypes.DEFAULT_TYPE):
                 text_p += f"{medals[idx]} <a href='tg://user?id={uid}'>{uinfo['name']}</a> — <b>{uinfo['count']}</b> ഫോട്ടോകൾ 🔥\n"
             
             try:
+                # പഴയ ലീഡർബോർഡ് ഉണ്ടെങ്കിൽ ഡിലീറ്റ് ചെയ്യുന്നു
+                if chat_id in last_photo_lb_message_id:
+                    try:
+                        await context.bot.delete_message(chat_id=chat_id, message_id=last_photo_lb_message_id[chat_id])
+                    except Exception:
+                        pass
+
                 msg_p = await context.bot.send_message(chat_id=chat_id, text=text_p, parse_mode="HTML", reply_markup=share_keyboard)
-                # 1 മിനിറ്റ് (60 സെക്കൻഡ്) കഴിയുമ്പോൾ ഡിലീറ്റ് ചെയ്യുന്നു
-                asyncio.create_task(delete_after_delay(context, chat_id, msg_p.message_id, 60))
+                last_photo_lb_message_id[chat_id] = msg_p.message_id
+
+                # ഗ്രൂപ്പിൽ മെസ്സേജ് Pin ചെയ്യുന്നു
+                try:
+                    await context.bot.pin_chat_message(chat_id=chat_id, message_id=msg_p.message_id, disable_notification=True)
+                except Exception as e:
+                    print(f"Pin ചെയ്യുന്നതിൽ എറർ: {e}")
+
             except Exception as e:
                 print(f"ഓട്ടോ ഫോട്ടോ ലീഡർബോർഡ് എറർ: {e}")
 
@@ -457,26 +488,31 @@ async def auto_send_leaderboards(context: ContextTypes.DEFAULT_TYPE):
                 text_l += f"{medals[idx]} <a href='tg://user?id={uid}'>{uinfo['name']}</a> — <b>{uinfo['count']}</b> ലിങ്കുകൾ ⚡\n"
             
             try:
+                # പഴയ ലീഡർബോർഡ് ഉണ്ടെങ്കിൽ ഡിലീറ്റ് ചെയ്യുന്നു
+                if chat_id in last_link_lb_message_id:
+                    try:
+                        await context.bot.delete_message(chat_id=chat_id, message_id=last_link_lb_message_id[chat_id])
+                    except Exception:
+                        pass
+
                 msg_l = await context.bot.send_message(chat_id=chat_id, text=text_l, parse_mode="HTML", reply_markup=share_keyboard)
-                # 1 മിനിറ്റ് (60 സെക്കൻഡ്) കഴിയുമ്പോൾ ഡിലീറ്റ് ചെയ്യുന്നു
-                asyncio.create_task(delete_after_delay(context, chat_id, msg_l.message_id, 60))
+                last_link_lb_message_id[chat_id] = msg_l.message_id
+
+                # ഗ്രൂപ്പിൽ മെസ്സേജ് Pin ചെയ്യുന്നു
+                try:
+                    await context.bot.pin_chat_message(chat_id=chat_id, message_id=msg_l.message_id, disable_notification=True)
+                except Exception as e:
+                    print(f"Pin ചെയ്യുന്നതിൽ എറർ: {e}")
+
             except Exception as e:
                 print(f"ഓട്ടോ ലിങ്ക് ലീഡർബോർഡ് എറർ: {e}")
-
-async def delete_after_delay(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, delay: int):
-    await asyncio.sleep(delay)
-    try:
-        await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
-    except Exception:
-        pass
-
 
 def main():
     keep_alive()
 
     app = Application.builder().token(TOKEN).build()
 
-    # 1 മിനിറ്റ് കൂടുമ്പോൾ ഓട്ടോമാറ്റിക് ലീഡർബോർഡ് പ്രവർത്തിക്കാൻ (60 സെക്കൻഡ്)
+    # 15 മിനിറ്റ് കൂടുമ്പോൾ ഓട്ടോമാറ്റിക് ലീഡർബോർഡ് പ്രവർത്തിക്കാൻ (900 സെക്കൻഡ്)
     if app.job_queue:
         app.job_queue.run_repeating(auto_send_leaderboards, interval=900, first=10)
 
@@ -484,7 +520,7 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("antilink", toggle_antilink))
-    app.add_handler(CommandHandler("autolb", toggle_autolb)) # പുതിയ ഓൺ/ഓഫ് കമാൻഡ്
+    app.add_handler(CommandHandler("autolb", toggle_autolb))
     app.add_handler(CommandHandler("ban", ban_user))
     app.add_handler(CommandHandler("unban", unban_user))
     app.add_handler(CommandHandler("kick", kick_user))
