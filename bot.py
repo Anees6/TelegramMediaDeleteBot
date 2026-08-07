@@ -38,16 +38,16 @@ last_welcome_message_id = {} # {chat_id: message_id}
 last_photo_lb_message_id = {} # {chat_id: message_id}
 last_link_lb_message_id = {}  # {chat_id: message_id}
 
-# --- ഓരോ ഗ്രൂപ്പിനും വെവ്വേറെ ഡാറ്റ സൂക്ഷിക്കാൻ ഡാറ്റാ സ്ട്രക്ചർ മാറ്റി ---
+# --- ഓരോ ഗ്രൂപ്പിനും വെവ്വേറെ ഡാറ്റ സൂക്ഷിക്കാൻ ഡാറ്റാ സ്ട്രക്ചർ ---
 antilink_status = {}  # {chat_id: True/False}
 autolb_status = {}    # {chat_id: True/False} -> ഓരോ ഗ്രൂപ്പിലെയും ഓട്ടോ ലീഡർബോർഡ് സ്റ്റാറ്റസ്
 user_photo_count = {} # {chat_id: {user_id: {"name": str, "count": int}}}
 user_link_count = {}  # {chat_id: {user_id: {"name": str, "count": int}}}
 active_chats = set()  # ആക്ടീവ് ആയ ഗ്രൂപ്പുകളുടെ ചാറ്റ് ഐഡികൾ സൂക്ഷിക്കാൻ
 
-# ഷെയർ ബട്ടണിനായുള്ള Inline Keyboard Markup
+# നേരെ ചാറ്റുകളിലേക്ക് ഷെയർ ചെയ്യാൻ തക്കവണ്ണം ക്രമീകരിച്ച Inline Keyboard Markup
 share_keyboard = InlineKeyboardMarkup([
-    [InlineKeyboardButton("🔗 Inline Share", url="https://t.me/share/url?url=https://t.me/+mJhoOlJlNKwzOThl")]
+    [InlineKeyboardButton("🔗 Share to Chat", url="https://t.me/share/url?url=https://t.me/+-KKPdBquED1lOTZl")]
 ])
 
 # കമാൻഡ് അടിക്കുന്ന ആൾ ഗ്രൂപ്പിലെ അഡ്മിൻ ആണോ എന്ന് പരിശോധിക്കാനുള്ള ഫങ്ഷൻ
@@ -262,6 +262,9 @@ async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- ഡിലീറ്റ് ചെയ്യാനും വാണിംഗ് നൽകാനുമുള്ള ഫങ്ഷൻ ---
 async def handle_normal_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.effective_chat:
+        return
+
     chat_id = update.effective_chat.id
     user = update.effective_user
 
@@ -391,26 +394,31 @@ async def photo_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sorted_users = sorted(user_photo_count[chat_id].items(), key=lambda x: x[1]["count"], reverse=True)[:5]
     
     text = "🏆 <b><u>TOP 5 PHOTO LEADERBOARD</u></b> 🏆\n\n"
+    text += "🌟 <b>ഫോട്ടോകൾ ഷെയർ ചെയ്ത് ഗ്രൂപ്പിനെ സജീവമാക്കിയ എല്ലാ പ്രിയപ്പെട്ട സുഹൃത്തുക്കൾക്കും അളവറ്റ അഭിനന്ദനങ്ങൾ! നിങ്ങൾ പൊളിയാണ്! ❤️🔥</b>\n\n"
+    
     medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
     
     for idx, (uid, user_info) in enumerate(sorted_users):
         text += f"{medals[idx]} <a href='tg://user?id={uid}'>{user_info['name']}</a> — <b>{user_info['count']}</b> ഫോട്ടോകൾ 🔥\n"
         
+    text += "\n⚠️ <b><u>ഗൗരവമുള്ള ഒരു മുന്നറിയിപ്പ്:</u></b>\n"
+    text += "😡 <i>ഗ്രൂപ്പിൽ വന്നിട്ട് ഒരു ഫോട്ടോ പോലും ഷെയർ ചെയ്യാതെ വെറുതെ ഇരിക്കുന്നവരെ ഇവിടെ വെച്ചുപൊറുപ്പിക്കില്ല! ഫോട്ടോസ് അയക്കാൻ താല്പര്യമില്ലാത്തവർക്ക് ഗ്രൂപ്പിൽ സ്ഥാനമില്ല, അങ്ങനെയുള്ളവരെ ഉടൻ തന്നെ കിക്ക് ചെയ്തു പുറത്താക്കുന്നതായിരിക്കും! 🛑👊</i>"
+
     # പഴയ ലീഡർബോർഡ് ഉണ്ടെങ്കിൽ ഡിലീറ്റ് ചെയ്യുന്നു
     if chat_id in last_photo_lb_message_id:
         try:
             await context.bot.delete_message(chat_id=chat_id, message_id=last_photo_lb_message_id[chat_id])
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"പഴയ ഫോട്ടോ ലീഡർബോർഡ് ഡിലീറ്റ് ചെയ്യുമ്പോൾ എറർ: {e}")
 
-    sent_msg = await update.message.reply_text(text, parse_mode="HTML", reply_markup=share_keyboard)
-    last_photo_lb_message_id[chat_id] = sent_msg.message_id
-    
-    # ഗ്രൂപ്പിൽ മെസ്സേജ് Pin ചെയ്യുന്നു
     try:
+        sent_msg = await update.message.reply_text(text, parse_mode="HTML", reply_markup=share_keyboard)
+        last_photo_lb_message_id[chat_id] = sent_msg.message_id
+        
+        # ഗ്രൂപ്പിൽ മെസ്സേജ് Pin ചെയ്യുന്നു
         await context.bot.pin_chat_message(chat_id=chat_id, message_id=sent_msg.message_id, disable_notification=True)
     except Exception as e:
-        print(f"Pin ചെയ്യുന്നതിൽ എറർ: {e}")
+        print(f"ഫോട്ടോ ലീഡർബോർഡ് അയക്കുകയോ Pin ചെയ്യുകയോ ചെയ്യുമ്പോൾ എറർ: {e}")
 
 # --- 2. Top 5 Links Leaderboard കമാൻഡ് ---
 async def link_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -432,17 +440,17 @@ async def link_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if chat_id in last_link_lb_message_id:
         try:
             await context.bot.delete_message(chat_id=chat_id, message_id=last_link_lb_message_id[chat_id])
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"പഴയ ലിങ്ക് ലീഡർബോർഡ് ഡിലീറ്റ് ചെയ്യുമ്പോൾ എറർ: {e}")
 
-    sent_msg = await update.message.reply_text(text, parse_mode="HTML", reply_markup=share_keyboard)
-    last_link_lb_message_id[chat_id] = sent_msg.message_id
-    
-    # ഗ്രൂപ്പിൽ മെസ്സേജ് Pin ചെയ്യുന്നു
     try:
+        sent_msg = await update.message.reply_text(text, parse_mode="HTML", reply_markup=share_keyboard)
+        last_link_lb_message_id[chat_id] = sent_msg.message_id
+        
+        # ഗ്രൂപ്പിൽ മെസ്സേജ് Pin ചെയ്യുന്നു
         await context.bot.pin_chat_message(chat_id=chat_id, message_id=sent_msg.message_id, disable_notification=True)
     except Exception as e:
-        print(f"Pin ചെയ്യുന്നതിൽ എറർ: {e}")
+        print(f"ലിങ്ക് ലീഡർബോർഡ് അയക്കുകയോ Pin ചെയ്യുകയോ ചെയ്യുമ്പോൾ എറർ: {e}")
 
 # --- ഓട്ടോമാറ്റിക് ലിഡർ ബോർഡ് അയക്കുന്ന ഫങ്ഷൻ (15 മിനിറ്റ് കൂടുമ്പോൾ) ---
 async def auto_send_leaderboards(context: ContextTypes.DEFAULT_TYPE):
@@ -454,11 +462,17 @@ async def auto_send_leaderboards(context: ContextTypes.DEFAULT_TYPE):
         # 1. ഓട്ടോ ഫോട്ടോ ലീഡർബോർഡ്
         if chat_id in user_photo_count and user_photo_count[chat_id]:
             sorted_p = sorted(user_photo_count[chat_id].items(), key=lambda x: x[1]["count"], reverse=True)[:5]
+            
             text_p = "🏆 <b><u>TOP 5 PHOTO LEADERBOARD</u></b> 🏆\n\n"
+            text_p += "🌟 <b>ഫോട്ടോകൾ ഷെയർ ചെയ്ത് ഗ്രൂപ്പിനെ മനോഹരവും സജീവവുമാക്കിയ എല്ലാ പ്രിയപ്പെട്ട കൂട്ടുകാർക്കും ഹൃദയം നിറഞ്ഞ നന്ദിയും അഭിനന്ദനങ്ങളും! നിങ്ങൾ സൂപ്പർ ആണ്! ❤️🔥</b>\n\n"
+            
             medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
             for idx, (uid, uinfo) in enumerate(sorted_p):
                 text_p += f"{medals[idx]} <a href='tg://user?id={uid}'>{uinfo['name']}</a> — <b>{uinfo['count']}</b> ഫോട്ടോകൾ 🔥\n"
             
+            text_p += "\n⚠️ <b><u>കർഷന നിർദ്ദേശം:</u></b>\n"
+            text_p += "😡 <i>ഇതുവരെ ഒരു ഫോട്ടോ പോലും അയക്കാതെ നോക്കി നിൽക്കുന്നവർ ശ്രദ്ധിക്കുക! ഇങ്ങനെയുള്ളവരെ ഗ്രൂപ്പിൽ വച്ചുകൊണ്ടിരിക്കാൻ പറ്റില്ല. ഫോട്ടോ അയക്കാത്തവരെ ഉടൻ തന്നെ ഗ്രൂപ്പിൽ നിന്നും പുറത്താക്കുന്നതായിരിക്കും! 🛑👊</i>"
+
             try:
                 # പഴയ ലീഡർബോർഡ് ഉണ്ടെങ്കിൽ ഡിലീറ്റ് ചെയ്യുന്നു
                 if chat_id in last_photo_lb_message_id:
@@ -516,8 +530,10 @@ def main():
     if app.job_queue:
         app.job_queue.run_repeating(auto_send_leaderboards, interval=900, first=10)
 
+    # മെസ്സേജുകൾ ട്രാക്ക് ചെയ്യുന്ന ഹാൻഡ്‌ലർ
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, track_messages), group=1)
 
+    # കമാൻഡുകൾ
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("antilink", toggle_antilink))
     app.add_handler(CommandHandler("autolb", toggle_autolb))
